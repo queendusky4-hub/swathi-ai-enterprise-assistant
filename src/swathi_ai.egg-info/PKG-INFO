@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: swathi-ai
+Version: 1.0.0
+Summary: Multilingual Tamil, Tanglish and English AI assistant
+Requires-Python: >=3.11
+Requires-Dist: streamlit<2,>=1.40
+Requires-Dist: requests<3,>=2.32
+Requires-Dist: transformers<6,>=4.45
+Requires-Dist: torch>=2.2
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: uvicorn[standard]<1,>=0.34
+Requires-Dist: python-dotenv<2,>=1.0

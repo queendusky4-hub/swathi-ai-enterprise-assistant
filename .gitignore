@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.streamlit/secrets.toml
+data/*.db
+model/*
+!model/.gitkeep
+*.bin
+*.pt
+*.pth
+.DS_Store
+.vscode/
+.idea/
