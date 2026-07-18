@@ -5,6 +5,7 @@ src/swathi_ai/api.py
 src/swathi_ai/classifier.py
 src/swathi_ai/config.py
 src/swathi_ai/database.py
+src/swathi_ai/documents.py
 src/swathi_ai/engine.py
 src/swathi_ai/intents.py
 src/swathi_ai/language.py

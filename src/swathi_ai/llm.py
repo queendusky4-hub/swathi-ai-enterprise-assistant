@@ -9,36 +9,61 @@ from .config import Settings
 
 logger = logging.getLogger(__name__)
 
+
+LANGUAGE_INSTRUCTIONS = {
+    "tamil": (
+        "Reply only in natural Tamil script. "
+        "Do not reply in English unless the user specifically requests English."
+    ),
+    "tanglish": (
+        "Reply only in Tanglish: Tamil language written using English letters. "
+        "Do not use Tamil script. Do not reply fully in English."
+    ),
+    "english": (
+        "Reply only in clear English unless the user specifically requests "
+        "Tamil or Tanglish."
+    ),
+}
+
+
 SYSTEM_PROMPT = """
-You are Swathi AI, a helpful multilingual assistant.
+You are Swathi AI, a multilingual assistant supporting:
 
-Reply in the same language as the user:
-- Tamil when the user writes in Tamil
-- Tanglish when the user writes in romanised Tamil
-- English when the user writes in English
+1. Tamil written in Tamil script
+2. Tanglish, meaning Tamil written using English letters
+3. English
 
-Be clear, concise, friendly, and accurate.
-Do not claim to have live information unless current data is supplied.
+Always follow the requested response language exactly.
+
+Be helpful, friendly, accurate and concise.
+Use conversation history when answering follow-up questions.
+Remember relevant information shared earlier in the same conversation.
+Never claim to have live information unless current information is provided.
 """.strip()
 
 
 class LLMClient:
-    """Client for an OpenAI-compatible chat completions endpoint."""
+    """Client for an OpenAI-compatible chat-completions endpoint."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
     @property
     def configured(self) -> bool:
-        """Return True when the required LLM settings exist."""
         return bool(
             self.settings.llm_base_url
             and self.settings.llm_api_key
             and self.settings.llm_model
         )
 
-    def generate(self, user_text: str) -> str | None:
-        """Generate an answer using the configured online LLM."""
+    def generate(
+    self,
+    user_text: str,
+    language: str = "english",
+    response_format: str = "Auto detect",
+    history: list[tuple[str, str]] | None = None,
+) -> str | None:
+        """Generate a response in Tamil, Tanglish or English."""
 
         if not self.configured:
             logger.warning("LLM is not configured.")
@@ -56,20 +81,43 @@ class LLMClient:
             ),
         }
 
+        language_instruction = LANGUAGE_INSTRUCTIONS.get(
+            language,
+            LANGUAGE_INSTRUCTIONS["english"],
+        )
+
+        messages: list[dict[str, str]] = [
+            {
+                "role": "system",
+                "content": (
+                    f"{SYSTEM_PROMPT}\n\n"
+                    f"Response-language requirement:\n"
+                    f"{language_instruction}"
+                ),
+            }
+        ]
+
+        for role, message in (history or [])[-20:]:
+            if role in {"user", "assistant"}:
+                messages.append(
+                    {
+                        "role": role,
+                        "content": message,
+                    }
+                )
+
+        messages.append(
+            {
+                "role": "user",
+                "content": user_text,
+            }
+        )
+
         payload: dict[str, Any] = {
             "model": self.settings.llm_model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": user_text,
-                },
-            ],
-            "temperature": 0.3,
-            "max_tokens": 350,
+            "messages": messages,
+            "temperature": 0.25,
+            "max_tokens": 600,
         }
 
         try:
@@ -89,7 +137,6 @@ class LLMClient:
                 return None
 
             data = response.json()
-
             content = data["choices"][0]["message"]["content"]
 
             if not isinstance(content, str):
@@ -122,7 +169,7 @@ class LLMClient:
             ValueError,
         ) as exc:
             logger.exception(
-                "Invalid LLM response structure: %s",
+                "Invalid LLM response: %s",
                 exc,
             )
             return None
