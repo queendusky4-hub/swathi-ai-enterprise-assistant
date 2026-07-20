@@ -145,3 +145,55 @@ def chat(request: ChatRequest) -> ChatResponse:
         intent=result.intent,
         confidence=result.confidence,
     )
+
+@app.post(
+    "/documents/upload",
+    response_model=UploadResponse,
+)
+async def upload_document(
+    file: UploadFile = File(...),
+) -> UploadResponse:
+    service = get_document_service()
+    file_bytes = await file.read()
+
+    result = service.index_document(
+        filename=file.filename or "uploaded_file",
+        file_bytes=file_bytes,
+    )
+
+    return UploadResponse(
+        document_id=result.document_id,
+        filename=result.filename,
+        chunk_count=result.chunk_count,
+    )
+
+
+@app.post(
+    "/documents/search",
+    response_model=SearchResponse,
+)
+def search_documents(
+    request: SearchRequest,
+) -> SearchResponse:
+    service = get_document_service()
+
+    results = service.search(
+        query=request.query,
+        top_k=request.top_k,
+    )
+
+    return SearchResponse(
+        results=[
+            SearchResult(
+                chunk_id=item.chunk_id,
+                document_id=item.document_id,
+                filename=item.filename,
+                text=item.text,
+                score=item.score,
+                page_number=item.page_number,
+                section_type=item.section_type,
+                chunk_index=item.chunk_index,
+            )
+            for item in results
+        ]
+    )
