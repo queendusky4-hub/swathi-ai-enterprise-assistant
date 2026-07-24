@@ -1,0 +1,5 @@
+Swathi AI is an enterprise multilingual assistant.
+
+It supports Tamil, Tanglish, and English.
+
+The platform uses FastAPI, Streamlit, document upload, and retrieval augmented generation.

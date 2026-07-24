@@ -1,0 +1,24 @@
+Swathika Kokulavasan
+
+Professional Summary
+AI and software professional with experience in machine learning,
+FastAPI, Streamlit, Python, Docker, Azure and document retrieval systems.
+
+Education
+MSc Artificial Intelligence
+University of Wolverhampton
+
+Technical Skills
+Python, FastAPI, Streamlit, Machine Learning, NLP, RAG, FAISS,
+Docker, GitHub Actions, Azure, SQL, MongoDB and JavaScript.
+
+Experience
+Full Stack Developer
+DAE JUNG E & C
+July 2023 to February 2026
+
+Projects
+Swathi AI Enterprise Assistant
+Multilingual Tamil Chatbot
+Research-Grade RAG Quality Gate
+AI Research Copilot
