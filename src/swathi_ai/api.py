@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import logging
+from time import perf_counter
 from typing import Any, Literal
 from uuid import uuid4
 from collections import Counter
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.security import OAuth2PasswordRequestForm
+from .vision_service import get_vision_service
 from pydantic import BaseModel, Field
 
 from .auth import (
@@ -42,6 +54,49 @@ app = FastAPI(
     ),
     version="2.5.0",
 )
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger("swathi_ai.api")
+
+
+@app.middleware("http")
+async def request_logging_middleware(
+    request: Request,
+    call_next,
+):
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    started_at = perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed_ms = (perf_counter() - started_at) * 1000
+        logger.exception(
+            "request_failed request_id=%s method=%s path=%s duration_ms=%.2f",
+            request_id,
+            request.method,
+            request.url.path,
+            elapsed_ms,
+        )
+        raise
+
+    elapsed_ms = (perf_counter() - started_at) * 1000
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time-Ms"] = f"{elapsed_ms:.2f}"
+
+    logger.info(
+        "request_completed request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
 
 
 auth_service = get_auth_service()
@@ -115,6 +170,13 @@ class DocumentAskResponse(BaseModel):
     source: str
     retrieved_chunks: int
     sources: list[DocumentSource]
+
+class ImageAnalyzeResponse(BaseModel):
+    filename: str
+    question: str
+    answer: str
+    source: str
+    mime_type: str
 
 
 # ---------------------------------------------------------------------
@@ -713,4 +775,105 @@ def ask_documents(
         source=answer_source,
         retrieved_chunks=len(source_items),
         sources=source_items,
+    )
+
+# ---------------------------------------------------------------------
+# IMAGE ANALYSIS
+# ---------------------------------------------------------------------
+
+ALLOWED_IMAGE_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+}
+
+
+@app.post(
+    "/images/analyze",
+    response_model=ImageAnalyzeResponse,
+    tags=["Image Analysis"],
+)
+async def analyze_image(
+    file: UploadFile = File(...),
+    question: str = Form("Describe and analyze this image."),
+    response_format: ResponseFormat = Form("Auto detect"),
+    current_user: dict = Depends(get_current_user),
+) -> ImageAnalyzeResponse:
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An image filename is required.",
+        )
+
+    mime_type = str(file.content_type or "").strip().lower()
+
+    if mime_type == "image/jpg":
+        mime_type = "image/jpeg"
+
+    if mime_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Unsupported image format. "
+                "Please upload PNG, JPG, JPEG, or WEBP."
+            ),
+        )
+
+    image_bytes = await file.read()
+
+    if not image_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded image is empty.",
+        )
+
+    # Maximum image size: 10 MB
+    maximum_size = 10 * 1024 * 1024
+
+    if len(image_bytes) > maximum_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="The uploaded image must be smaller than 10 MB.",
+        )
+
+    cleaned_question = str(question or "").strip()
+
+    if not cleaned_question:
+        cleaned_question = "Describe and analyze this image."
+
+    vision_service = get_vision_service()
+
+    try:
+        answer = vision_service.analyze_image(
+            image_bytes=image_bytes,
+            question=cleaned_question,
+            mime_type=mime_type,
+            response_format=response_format,
+        )
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        ) from error
+
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Image analysis failed: {error}",
+        ) from error
+
+    return ImageAnalyzeResponse(
+        filename=file.filename,
+        question=cleaned_question,
+        answer=answer,
+        source="vision-llm",
+        mime_type=mime_type,
     )
