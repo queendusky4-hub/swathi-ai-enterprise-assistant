@@ -19,6 +19,16 @@ class ChatResult:
 
 
 class ChatEngine:
+    """
+    Main chat router for Swathi AI.
+
+    Routing rules:
+    - General Assistant never searches uploaded documents.
+    - Document RAG runs only when explicit document IDs are supplied.
+    - Rule-based and BERT responses remain available.
+    - Online LLM is used as the final general-assistant fallback.
+    """
+
     def __init__(
         self,
         classifier: IntentClassifier,
@@ -39,7 +49,9 @@ class ChatEngine:
         response_format: str,
     ) -> tuple[str, bool]:
         detected_language = detect_language(text)
-        selected = response_format.strip().lower()
+        selected = str(
+            response_format or "Auto detect"
+        ).strip().lower()
 
         if selected == "tamil only":
             return "tamil", False
@@ -55,22 +67,46 @@ class ChatEngine:
 
         return detected_language, False
 
+    @staticmethod
+    def _clean_document_ids(
+        document_ids: list[str] | None,
+    ) -> list[str]:
+        if not document_ids:
+            return []
+
+        cleaned_ids: list[str] = []
+
+        for document_id in document_ids:
+            clean_id = str(document_id or "").strip()
+
+            if clean_id and clean_id not in cleaned_ids:
+                cleaned_ids.append(clean_id)
+
+        return cleaned_ids
+
     def retrieve_document_context(
         self,
         query: str,
         document_ids: list[str] | None = None,
     ) -> tuple[str, list[str]]:
         """
-        Search uploaded documents and prepare context for the LLM.
+        Search only the explicitly selected uploaded documents.
 
-        When document_ids is provided, only those documents are searched.
-        When document_ids is None, all indexed documents are searched.
+        An empty or missing document_ids list means General Assistant mode,
+        so document retrieval is skipped completely.
         """
+
+        selected_document_ids = self._clean_document_ids(
+            document_ids
+        )
+
+        if not selected_document_ids:
+            return "", []
 
         if self.document_service is None:
             return "", []
 
-        cleaned_query = query.strip()
+        cleaned_query = str(query or "").strip()
 
         if not cleaned_query:
             return "", []
@@ -79,10 +115,10 @@ class ChatEngine:
             results = self.document_service.search(
                 query=cleaned_query,
                 top_k=self.rag_top_k,
-                document_ids=document_ids,
+                document_ids=selected_document_ids,
             )
         except Exception:
-            # RAG errors must not break normal chatbot responses.
+            # RAG failures must never break General Assistant.
             return "", []
 
         if not results:
@@ -147,7 +183,9 @@ class ChatEngine:
                 source_label += f", relevance: {score}"
 
             if document_id:
-                source_label += f", document_id: {document_id}"
+                source_label += (
+                    f", document_id: {document_id}"
+                )
 
             context_parts.append(
                 f"{source_label}\n{chunk_text}"
@@ -168,10 +206,6 @@ class ChatEngine:
         question: str,
         context: str,
     ) -> str:
-        """
-        Build a grounded prompt for document-based question answering.
-        """
-
         return f"""
 You are answering a question using uploaded documents.
 
@@ -203,11 +237,7 @@ USER QUESTION:
         answer: str,
         citations: list[str],
     ) -> str:
-        """
-        Add a sources section to the final answer.
-        """
-
-        cleaned_answer = answer.strip()
+        cleaned_answer = str(answer or "").strip()
 
         if not citations:
             return cleaned_answer
@@ -232,12 +262,19 @@ USER QUESTION:
         document_ids: list[str] | None = None,
     ) -> ChatResult | None:
         """
-        Retrieve document chunks and generate a grounded answer.
+        Generate a document-grounded response only for explicit IDs.
         """
+
+        selected_document_ids = self._clean_document_ids(
+            document_ids
+        )
+
+        if not selected_document_ids:
+            return None
 
         context, citations = self.retrieve_document_context(
             query=question,
-            document_ids=document_ids,
+            document_ids=selected_document_ids,
         )
 
         if not context:
@@ -273,13 +310,11 @@ USER QUESTION:
         if not llm_reply:
             return None
 
-        final_answer = self.append_sources(
-            answer=llm_reply,
-            citations=citations,
-        )
-
         return ChatResult(
-            text=final_answer,
+            text=self.append_sources(
+                answer=llm_reply,
+                citations=citations,
+            ),
             source="rag",
         )
 
@@ -291,11 +326,21 @@ USER QUESTION:
         history: list[tuple[str, str]] | None = None,
         document_ids: list[str] | None = None,
     ) -> ChatResult:
-        cleaned_text = text.strip()
+        cleaned_text = str(text or "").strip()
+
+        if not cleaned_text:
+            return ChatResult(
+                text="Please enter a message.",
+                source="validation",
+            )
 
         language, show_all = self.resolve_response_format(
             text=cleaned_text,
             response_format=response_format,
+        )
+
+        selected_document_ids = self._clean_document_ids(
+            document_ids
         )
 
         rule_intent = rule_based_intent(cleaned_text)
@@ -312,13 +357,17 @@ USER QUESTION:
                 confidence=1.0,
             )
 
-        if online:
+        # Critical routing rule:
+        # RAG is attempted only when the caller explicitly supplies
+        # one or more active document IDs. Normal /chat calls provide
+        # no document IDs and therefore always remain general chat.
+        if online and selected_document_ids:
             rag_result = self.generate_rag_response(
                 question=cleaned_text,
                 language=language,
                 response_format=response_format,
                 history=history,
-                document_ids=document_ids,
+                document_ids=selected_document_ids,
             )
 
             if rag_result is not None:

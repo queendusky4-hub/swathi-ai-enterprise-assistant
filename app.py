@@ -518,6 +518,8 @@ def logout_user() -> None:
     st.session_state.current_user = None
     st.session_state.chat = []
     st.session_state.document_chat = []
+    st.session_state.document_chat_history = []
+    st.session_state.image_chat_history = []
     st.session_state.pending_prompt = None
     st.rerun()
 
@@ -640,6 +642,21 @@ def ask_document_api(
     online: bool,
     top_k: int = 5,
 ) -> dict[str, Any]:
+    document_ids = [
+        str(document.get("document_id"))
+        for document in st.session_state.get(
+            "indexed_documents",
+            [],
+        )
+        if document.get("document_id")
+    ]
+
+    if not document_ids:
+        raise ValueError(
+            "No active documents are selected. "
+            "Upload and process a document first."
+        )
+
     response = requests.post(
         f"{API_BASE_URL}/documents/ask",
         json={
@@ -650,12 +667,88 @@ def ask_document_api(
                 "selected_response_format",
                 "Auto detect",
             ),
+            "document_ids": document_ids,
         },
         headers=_auth_headers(),
         timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
+
+
+def upload_document(uploaded_file: Any) -> dict[str, Any]:
+    """Portfolio-facing alias for the existing document upload helper."""
+    return upload_document_to_api(uploaded_file)
+
+
+def ask_document(
+    question: str,
+    online: bool,
+    top_k: int = 5,
+) -> dict[str, Any]:
+    """Portfolio-facing alias for document RAG questions."""
+    return ask_document_api(question, online, top_k)
+
+
+def upload_image(uploaded_file: Any) -> dict[str, Any]:
+    """Store an image in Streamlit session state for Vision Chat."""
+    image_bytes = uploaded_file.getvalue()
+    signature = (
+        f"{uploaded_file.name}:{uploaded_file.size}:"
+        f"{hashlib.sha256(image_bytes).hexdigest()}"
+    )
+    record = {
+        "image_id": signature,
+        "name": uploaded_file.name,
+        "bytes": image_bytes,
+        "mime_type": uploaded_file.type or "application/octet-stream",
+        "signature": signature,
+    }
+
+    existing = {
+        item.get("signature")
+        for item in st.session_state.get("uploaded_images", [])
+    }
+    if signature not in existing:
+        st.session_state.uploaded_images.append(record)
+
+    return record
+
+
+def analyze_image(
+    image_record: dict[str, Any],
+    prompt: str,
+) -> dict[str, Any]:
+    """Send the selected image and question to the Vision API."""
+    image_bytes = image_record.get("bytes")
+    if not image_bytes:
+        raise ValueError("The selected image does not contain image data.")
+
+    files = {
+        "file": (
+            image_record.get("name", "image.png"),
+            image_bytes,
+            image_record.get("mime_type", "application/octet-stream"),
+        )
+    }
+    # Send both common field names so the helper remains compatible with
+    # FastAPI endpoints implemented with either `prompt` or `question`.
+    data = {
+        "prompt": prompt,
+        "question": prompt,
+    }
+    response = requests.post(
+        f"{API_BASE_URL}/images/analyze",
+        files=files,
+        data=data,
+        headers=_auth_headers(),
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    result = response.json()
+    if not isinstance(result, dict):
+        raise ValueError("The image analysis response was invalid.")
+    return result
 
 
 def get_indexed_documents() -> list[dict[str, Any]]:
@@ -665,14 +758,54 @@ def get_indexed_documents() -> list[dict[str, Any]]:
     return list(st.session_state.get("indexed_documents", []))
 
 
-def delete_indexed_document(document_id: str) -> None:
-    # The current backend does not expose DELETE /documents/{id}.
-    # Remove the item from the local Streamlit list only.
+def delete_indexed_document(document_id: str) -> int:
+    clean_document_id = str(document_id or "").strip()
+
+    if not clean_document_id:
+        return len(
+            st.session_state.get("indexed_documents", [])
+        )
+
+    # Delete from FastAPI when the endpoint is available.
+    try:
+        response = requests.delete(
+            f"{API_BASE_URL}/documents/{clean_document_id}",
+            headers=_auth_headers(),
+            timeout=15,
+        )
+
+        # 404/405 means this backend version does not expose deletion yet.
+        if response.status_code not in {200, 204, 404, 405}:
+            response.raise_for_status()
+
+    except requests.RequestException as error:
+        logger.warning(
+            "Backend document deletion failed for %s: %s",
+            clean_document_id,
+            error,
+        )
+
+    # Always remove it from the active Streamlit document selection.
     st.session_state.indexed_documents = [
         item
         for item in st.session_state.get("indexed_documents", [])
-        if str(item.get("document_id")) != str(document_id)
+        if str(item.get("document_id")) != clean_document_id
     ]
+
+    remaining_count = len(
+        st.session_state.indexed_documents
+    )
+
+    if remaining_count == 0:
+        st.session_state.document_chat = []
+        st.session_state.processed_file_signatures = set()
+        st.session_state.uploader_generation += 1
+        st.session_state.workspace_mode = "General Assistant"
+        st.session_state.previous_workspace_mode = "General Assistant"
+        st.session_state.pending_prompt = None
+        st.session_state.last_metadata = {}
+
+    return remaining_count
 
 
 def extract_http_error_detail(error: requests.HTTPError) -> str:
@@ -877,6 +1010,9 @@ if "chat" not in st.session_state:
 if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
 
+if "pending_prompt_workspace" not in st.session_state:
+    st.session_state.pending_prompt_workspace = None
+
 if "last_metadata" not in st.session_state:
     st.session_state.last_metadata = {}
 
@@ -890,6 +1026,19 @@ if "last_transcription" not in st.session_state:
 if "workspace_mode" not in st.session_state:
     st.session_state.workspace_mode = "General Assistant"
 
+if "previous_workspace_mode" not in st.session_state:
+    st.session_state.previous_workspace_mode = (
+        st.session_state.workspace_mode
+    )
+
+if "workspace_selector" not in st.session_state:
+    st.session_state.workspace_selector = (
+        st.session_state.workspace_mode
+    )
+
+if "pending_workspace_switch" not in st.session_state:
+    st.session_state.pending_workspace_switch = None
+
 if "document_chat" not in st.session_state:
     st.session_state.document_chat = []
 
@@ -899,9 +1048,30 @@ if "processed_file_signatures" not in st.session_state:
 if "uploaded_images" not in st.session_state:
     st.session_state.uploaded_images = []
 
+if "uploaded_documents" not in st.session_state:
+    st.session_state.uploaded_documents = []
+
+if "current_workspace" not in st.session_state:
+    st.session_state.current_workspace = "General Assistant"
+
+if "selected_document" not in st.session_state:
+    st.session_state.selected_document = None
+
+if "selected_image" not in st.session_state:
+    st.session_state.selected_image = None
+
+if "document_chat_history" not in st.session_state:
+    st.session_state.document_chat_history = st.session_state.document_chat
+
+if "image_chat_history" not in st.session_state:
+    st.session_state.image_chat_history = []
+
 
 if "indexed_documents" not in st.session_state:
     st.session_state.indexed_documents = []
+
+if "uploader_generation" not in st.session_state:
+    st.session_state.uploader_generation = 0
 
 
 # ---------------------------------------------------------------------
@@ -1090,20 +1260,88 @@ response_format = st.sidebar.selectbox(
 
 st.session_state.selected_response_format = response_format
 
+# Apply automatic workspace changes before the radio widget is created.
+pending_workspace_switch = st.session_state.get(
+    "pending_workspace_switch"
+)
+
+if pending_workspace_switch in {
+    "General Assistant",
+    "Document Chat",
+    "Image Chat",
+}:
+    st.session_state.workspace_selector = (
+        pending_workspace_switch
+    )
+    st.session_state.workspace_mode = (
+        pending_workspace_switch
+    )
+    st.session_state.previous_workspace_mode = (
+        pending_workspace_switch
+    )
+    st.session_state.pending_workspace_switch = None
+
 workspace_mode = st.sidebar.radio(
     "Workspace",
     [
         "General Assistant",
         "Document Chat",
+        "Image Chat",
     ],
-    index=(
-        1
-        if st.session_state.workspace_mode == "Document Chat"
-        else 0
-    ),
+    key="workspace_selector",
 )
 
+if workspace_mode != st.session_state.previous_workspace_mode:
+    st.session_state.pending_prompt = None
+    st.session_state.pending_prompt_workspace = None
+    st.session_state.last_audio_hash = None
+    st.session_state.last_transcription = None
+
+    if workspace_mode == "General Assistant":
+        # Start a clean general-assistant conversation so document/image
+        # instructions or context cannot leak into normal chat.
+        st.session_state.session_id = create_session_id()
+        st.session_state.chat = []
+        st.session_state.last_metadata = {}
+
+    st.session_state.previous_workspace_mode = workspace_mode
+
 st.session_state.workspace_mode = workspace_mode
+st.session_state.current_workspace = workspace_mode
+
+active_document_ids = [
+    str(document.get("document_id"))
+    for document in st.session_state.get(
+        "indexed_documents",
+        [],
+    )
+    if document.get("document_id")
+]
+
+# Document Chat is only active when at least one processed document is selected.
+# This prevents stale backend documents from hijacking normal questions.
+has_selected_image = bool(
+    st.session_state.get("selected_image")
+    and st.session_state.get("uploaded_images")
+)
+
+if workspace_mode == "Document Chat" and active_document_ids:
+    effective_workspace_mode = "Document Chat"
+elif workspace_mode == "Image Chat" and has_selected_image:
+    effective_workspace_mode = "Image Chat"
+else:
+    effective_workspace_mode = "General Assistant"
+
+if workspace_mode == "Document Chat" and not active_document_ids:
+    st.sidebar.info(
+        "Upload and process a document to use Document Chat. "
+        "Questions will use General Assistant until then."
+    )
+elif workspace_mode == "Image Chat" and not has_selected_image:
+    st.sidebar.info(
+        "Upload and select an image to use Image Chat. "
+        "Questions will use General Assistant until then."
+    )
 
 show_history = st.sidebar.checkbox(
     "Show saved conversations",
@@ -1176,6 +1414,9 @@ if voice_recording:
                 st.session_state.pending_prompt = (
                     transcribed_text
                 )
+                st.session_state.pending_prompt_workspace = (
+                    effective_workspace_mode
+                )
 
                 st.sidebar.success(
                     f"Recognised: {transcribed_text}"
@@ -1232,7 +1473,7 @@ uploaded_files = st.sidebar.file_uploader(
         "webp",
     ],
     accept_multiple_files=True,
-    key="files_and_photos_uploader",
+    key=f"files_and_photos_uploader_{st.session_state.uploader_generation}",
 )
 
 if uploaded_files:
@@ -1256,17 +1497,9 @@ if uploaded_files:
                 f"{hashlib.sha256(image_file.getvalue()).hexdigest()}"
             )
 
-            if not any(
-                item["signature"] == image_signature
-                for item in st.session_state.uploaded_images
-            ):
-                st.session_state.uploaded_images.append(
-                    {
-                        "name": image_file.name,
-                        "bytes": image_file.getvalue(),
-                        "signature": image_signature,
-                    }
-                )
+            image_record = upload_image(image_file)
+            if not st.session_state.selected_image:
+                st.session_state.selected_image = image_record["image_id"]
 
             st.sidebar.image(
                 image_file.getvalue(),
@@ -1274,9 +1507,8 @@ if uploaded_files:
                 use_container_width=True,
             )
 
-        st.sidebar.info(
-            "Photos are attached and previewed. "
-            "Image analysis needs a vision-enabled backend endpoint."
+        st.sidebar.success(
+            "Images are ready. Open Image Chat to analyse them."
         )
 
     if document_files:
@@ -1331,7 +1563,13 @@ if uploaded_files:
                             st.session_state.indexed_documents.append(
                                 document_record
                             )
+                            st.session_state.uploaded_documents.append(
+                                document_record
+                            )
 
+                        st.session_state.selected_document = (
+                            document_record.get("document_id")
+                        )
                         chunk_count = document_record["chunk_count"]
                         st.sidebar.success(
                             f"{document_file.name}: "
@@ -1350,10 +1588,12 @@ if uploaded_files:
                         )
 
                 if successful_uploads:
-                    st.session_state.workspace_mode = "Document Chat"
+                    st.session_state.pending_workspace_switch = (
+                        "Document Chat"
+                    )
                     st.rerun()
 
-if workspace_mode == "Document Chat":
+if effective_workspace_mode == "Document Chat":
     indexed_documents = get_indexed_documents()
 
     if indexed_documents:
@@ -1381,12 +1621,87 @@ if workspace_mode == "Document Chat":
                     key=f"delete_document_{document_id}_{index}",
                     use_container_width=True,
                 ):
-                    delete_indexed_document(str(document_id))
+                    remaining = delete_indexed_document(
+                        str(document_id)
+                    )
+
+                    if remaining == 0:
+                        st.session_state.pending_workspace_switch = (
+                            "General Assistant"
+                        )
+
                     st.rerun()
     else:
         st.sidebar.caption(
             "No documents processed in this session yet."
         )
+
+
+if st.session_state.uploaded_images:
+    with st.sidebar.expander(
+        f"Uploaded images ({len(st.session_state.uploaded_images)})",
+        expanded=effective_workspace_mode == "Image Chat",
+    ):
+        image_options = {
+            item["image_id"]: item["name"]
+            for item in st.session_state.uploaded_images
+        }
+        image_ids = list(image_options)
+        current_image_id = st.session_state.get("selected_image")
+        default_index = (
+            image_ids.index(current_image_id)
+            if current_image_id in image_ids
+            else 0
+        )
+        selected_image_id = st.selectbox(
+            "Selected image",
+            image_ids,
+            index=default_index,
+            format_func=lambda value: image_options[value],
+            key="selected_image_picker",
+        )
+        st.session_state.selected_image = selected_image_id
+        selected_record = next(
+            item
+            for item in st.session_state.uploaded_images
+            if item["image_id"] == selected_image_id
+        )
+        st.image(
+            selected_record["bytes"],
+            caption=selected_record["name"],
+            use_container_width=True,
+        )
+
+        if st.button(
+            "Delete selected image",
+            use_container_width=True,
+            key="delete_selected_image",
+        ):
+            st.session_state.uploaded_images = [
+                item
+                for item in st.session_state.uploaded_images
+                if item["image_id"] != selected_image_id
+            ]
+            st.session_state.selected_image = (
+                st.session_state.uploaded_images[0]["image_id"]
+                if st.session_state.uploaded_images
+                else None
+            )
+            if not st.session_state.uploaded_images:
+                st.session_state.image_chat_history = []
+                st.session_state.pending_workspace_switch = (
+                    "General Assistant"
+                )
+            st.rerun()
+
+        if st.button(
+            "Open Image Chat",
+            type="primary",
+            use_container_width=True,
+            key="open_image_chat",
+        ):
+            st.session_state.pending_workspace_switch = "Image Chat"
+            st.rerun()
 
 
 # ---------------------------------------------------------------------
@@ -1556,6 +1871,8 @@ if st.sidebar.button(
     st.session_state.session_id = create_session_id()
     st.session_state.chat = []
     st.session_state.document_chat = []
+    st.session_state.document_chat_history = []
+    st.session_state.image_chat_history = []
     st.session_state.pending_prompt = None
     st.session_state.last_metadata = {}
     st.session_state.last_audio_hash = None
@@ -1572,6 +1889,8 @@ if st.sidebar.button(
 
     st.session_state.chat = []
     st.session_state.document_chat = []
+    st.session_state.document_chat_history = []
+    st.session_state.image_chat_history = []
     st.session_state.pending_prompt = None
     st.session_state.last_metadata = {}
     st.rerun()
@@ -1585,6 +1904,8 @@ if st.sidebar.button(
     st.session_state.session_id = create_session_id()
     st.session_state.chat = []
     st.session_state.document_chat = []
+    st.session_state.document_chat_history = []
+    st.session_state.image_chat_history = []
     st.session_state.pending_prompt = None
     st.session_state.last_metadata = {}
     st.session_state.last_audio_hash = None
@@ -1618,6 +1939,9 @@ for index, prompt in enumerate(example_prompts):
         use_container_width=True,
     ):
         st.session_state.pending_prompt = prompt
+        st.session_state.pending_prompt_workspace = (
+            effective_workspace_mode
+        )
         st.rerun()
 
 
@@ -1728,11 +2052,12 @@ if mode == "Online AI":
 # DISPLAY CHAT HISTORY
 # ---------------------------------------------------------------------
 
-active_chat = (
-    st.session_state.document_chat
-    if workspace_mode == "Document Chat"
-    else st.session_state.chat
-)
+if effective_workspace_mode == "Document Chat":
+    active_chat = st.session_state.document_chat_history
+elif effective_workspace_mode == "Image Chat":
+    active_chat = st.session_state.image_chat_history
+else:
+    active_chat = st.session_state.chat
 
 for chat_item in active_chat:
     if len(chat_item) == 2:
@@ -1745,7 +2070,7 @@ for chat_item in active_chat:
         st.markdown(message)
 
         if (
-            workspace_mode == "Document Chat"
+            effective_workspace_mode == "Document Chat"
             and role == "assistant"
             and metadata
         ):
@@ -1783,17 +2108,27 @@ for chat_item in active_chat:
 # USER INPUT
 # ---------------------------------------------------------------------
 
-input_placeholder = (
-    "Ask Swathi AI anything..."
-    if workspace_mode == "General Assistant"
-    else "Ask a question about your uploaded documents..."
-)
+input_placeholder = {
+    "General Assistant": "Ask Swathi AI anything...",
+    "Document Chat": "Ask a question about your uploaded documents...",
+    "Image Chat": "Ask a question about the selected image...",
+}[effective_workspace_mode]
 
 user_input = st.chat_input(input_placeholder)
 
 if st.session_state.pending_prompt:
-    user_input = st.session_state.pending_prompt
+    pending_workspace = st.session_state.get(
+        "pending_prompt_workspace"
+    )
+
+    if (
+        pending_workspace is None
+        or pending_workspace == effective_workspace_mode
+    ):
+        user_input = st.session_state.pending_prompt
+
     st.session_state.pending_prompt = None
+    st.session_state.pending_prompt_workspace = None
 
 
 # ---------------------------------------------------------------------
@@ -1803,8 +2138,8 @@ if st.session_state.pending_prompt:
 if user_input:
     online_enabled = mode == "Online AI"
 
-    if workspace_mode == "Document Chat":
-        st.session_state.document_chat.append(
+    if effective_workspace_mode == "Document Chat":
+        st.session_state.document_chat_history.append(
             ("user", user_input, {})
         )
 
@@ -1894,7 +2229,7 @@ if user_input:
                                     st.write(preview)
                                 st.divider()
 
-                st.session_state.document_chat.append(
+                st.session_state.document_chat_history.append(
                     (
                         "assistant",
                         answer,
@@ -1910,11 +2245,84 @@ if user_input:
                 with st.chat_message("assistant"):
                     st.error(extract_http_error_detail(error))
 
+            except ValueError as error:
+                with st.chat_message("assistant"):
+                    st.warning(str(error))
+
             except requests.RequestException as error:
                 with st.chat_message("assistant"):
                     st.error(
                         f"Document Chat request failed: {error}"
                     )
+
+    elif effective_workspace_mode == "Image Chat":
+        st.session_state.image_chat_history.append(
+            ("user", user_input, {})
+        )
+
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        selected_image = next(
+            (
+                item
+                for item in st.session_state.uploaded_images
+                if item.get("image_id")
+                == st.session_state.get("selected_image")
+            ),
+            None,
+        )
+
+        if not backend_online:
+            with st.chat_message("assistant"):
+                st.error("Image Chat requires the FastAPI backend.")
+        elif selected_image is None:
+            with st.chat_message("assistant"):
+                st.error("Select an uploaded image before asking a question.")
+        else:
+            try:
+                with st.chat_message("assistant"):
+                    st.image(
+                        selected_image["bytes"],
+                        caption=selected_image["name"],
+                        width=320,
+                    )
+                    with st.spinner("Analysing the selected image..."):
+                        result = analyze_image(
+                            selected_image,
+                            user_input,
+                        )
+
+                    answer = str(
+                        result.get("answer")
+                        or result.get("reply")
+                        or result.get("analysis")
+                        or result.get("description")
+                        or "No image analysis was returned."
+                    )
+                    source = str(result.get("source", "vision-ai"))
+                    stream_response(answer)
+                    st.caption(
+                        f"Source: {source} | Image: {selected_image['name']}"
+                    )
+
+                st.session_state.image_chat_history.append(
+                    (
+                        "assistant",
+                        answer,
+                        {
+                            "source": source,
+                            "image_name": selected_image["name"],
+                        },
+                    )
+                )
+
+            except requests.HTTPError as error:
+                with st.chat_message("assistant"):
+                    st.error(extract_http_error_detail(error))
+            except (requests.RequestException, ValueError) as error:
+                with st.chat_message("assistant"):
+                    st.error(f"Image analysis failed: {error}")
 
     else:
         st.session_state.chat.append(
@@ -2032,7 +2440,7 @@ if user_input:
 footer_html = (
     '<div class="footer-note">'
     'Swathi AI Enterprise Assistant '
-    '&bull; FastAPI &bull; Gemini &bull; Streamlit &bull; Document RAG'
+    '&bull; FastAPI &bull; Gemini &bull; Streamlit &bull; Document RAG &bull; Vision AI'
     '</div>'
 )
 
