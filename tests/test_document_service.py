@@ -101,3 +101,32 @@ def test_search_excludes_completely_irrelevant_chunks() -> None:
     )
 
     assert results == []
+
+
+def test_bm25_scores_relevant_chunk_highest() -> None:
+    service = DocumentRAGService()
+
+    scores = service._calculate_bm25_scores(
+        query_tokens=["quantum", "computing"],
+        tokenized_chunks=[
+            ["quantum", "computing", "uses", "qubits"],
+            ["classical", "computing", "uses", "binary"],
+            ["vegetable", "soup", "recipe"],
+        ],
+    )
+
+    assert len(scores) == 3
+    assert scores[0] > scores[1]
+    assert scores[0] > scores[2]
+    assert scores[2] == 0.0
+
+
+def test_bm25_returns_empty_scores_for_empty_corpus() -> None:
+    service = DocumentRAGService()
+
+    scores = service._calculate_bm25_scores(
+        query_tokens=["machine", "learning"],
+        tokenized_chunks=[],
+    )
+
+    assert scores == []

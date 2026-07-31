@@ -6,6 +6,8 @@ from collections import Counter
 from dataclasses import dataclass
 from uuid import uuid4
 
+from rank_bm25 import BM25Okapi
+
 from .documents import extract_document_text
 
 
@@ -52,6 +54,17 @@ class DocumentRAGService:
         chunk_size: int = 900,
         chunk_overlap: int = 150,
     ) -> None:
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be greater than zero.")
+
+        if chunk_overlap < 0:
+            raise ValueError("chunk_overlap cannot be negative.")
+
+        if chunk_overlap >= chunk_size:
+            raise ValueError(
+                "chunk_overlap must be smaller than chunk_size."
+            )
+
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self._chunks: list[StoredChunk] = []
@@ -67,7 +80,7 @@ class DocumentRAGService:
         )
 
         document_id = str(uuid4())
-
+        
         chunks = self._split_text(text)
 
         for chunk_index, chunk_text in enumerate(chunks):
@@ -189,6 +202,29 @@ class DocumentRAGService:
         )
 
         return scored_results[:top_k]
+
+    def _calculate_bm25_scores(
+        self,
+        query_tokens: list[str],
+        tokenized_chunks: list[list[str]],
+    ) -> list[float]:
+        if not query_tokens or not tokenized_chunks:
+            return []
+
+        if any(not chunk_tokens for chunk_tokens in tokenized_chunks):
+            tokenized_chunks = [
+                chunk_tokens if chunk_tokens else [""]
+                for chunk_tokens in tokenized_chunks
+            ]
+
+        bm25 = BM25Okapi(tokenized_chunks)
+        raw_scores = bm25.get_scores(query_tokens)
+
+        return [
+            round(float(score), 6)
+            for score in raw_scores
+        ]
+
     def _split_text(self, text: str) -> list[str]:
         clean_text = re.sub(
             r"\n{3,}",
@@ -258,6 +294,9 @@ class DocumentRAGService:
             if chunk:
                 chunks.append(chunk)
 
+            if end >= len(text):
+                break
+
             start += step
 
         return chunks
@@ -310,39 +349,104 @@ class DocumentRAGService:
             flags=re.IGNORECASE,
         )
 
-        if match:
-            return int(match.group(1))
+        if not match:
+            return None
 
-        return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
 
     @staticmethod
     def _detect_section_type(
         text: str,
     ) -> str | None:
-        stripped_text = text.strip()
+        normalized_text = text.strip().lower()
 
-        if re.match(
-            r"^\[Page\s+\d+\]",
-            stripped_text,
-            flags=re.IGNORECASE,
-        ):
-            return "page"
+        if not normalized_text:
+            return None
 
-        if re.match(
-            r"^\[Table\s+\d+\]",
-            stripped_text,
-            flags=re.IGNORECASE,
-        ):
-            return "table"
+        section_patterns = {
+            "abstract": (
+                "abstract",
+                "executive summary",
+            ),
+            "introduction": (
+                "introduction",
+                "background",
+            ),
+            "literature_review": (
+                "literature review",
+                "related work",
+                "previous research",
+            ),
+            "methodology": (
+                "methodology",
+                "methods",
+                "research method",
+                "materials and methods",
+            ),
+            "results": (
+                "results",
+                "findings",
+                "evaluation results",
+            ),
+            "discussion": (
+                "discussion",
+                "analysis",
+            ),
+            "conclusion": (
+                "conclusion",
+                "conclusions",
+                "summary and conclusion",
+            ),
+            "references": (
+                "references",
+                "bibliography",
+            ),
+            "appendix": (
+                "appendix",
+                "appendices",
+            ),
+        }
 
-        first_line = stripped_text.splitlines()[0]
+        first_lines = normalized_text.splitlines()[:3]
+        opening_text = " ".join(first_lines)
 
-        if (
-            len(first_line) <= 100
-            and not first_line.endswith((".", "?", "!"))
-        ):
-            return "section"
+        for section_type, headings in section_patterns.items():
+            for heading in headings:
+                heading_pattern = rf"\b{re.escape(heading)}\b"
 
-        return "text"
+                if re.search(heading_pattern, opening_text):
+                    return section_type
 
+        return None
 
+    def clear(self) -> int:
+        removed_count = len(self._chunks)
+        self._chunks.clear()
+        return removed_count
+
+    def delete_document(
+        self,
+        document_id: str,
+    ) -> int:
+        original_count = len(self._chunks)
+
+        self._chunks = [
+            chunk
+            for chunk in self._chunks
+            if chunk.document_id != document_id
+        ]
+
+        return original_count - len(self._chunks)
+
+    def get_document_chunks(
+        self,
+        document_id: str,
+    ) -> list[StoredChunk]:
+        return [
+            chunk
+            for chunk in self._chunks
+            if chunk.document_id == document_id
+        ]
