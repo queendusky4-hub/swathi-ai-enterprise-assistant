@@ -100,25 +100,72 @@ class DocumentRAGService:
     ) -> list[DocumentSearchResult]:
         clean_query = query.strip()
 
-        if not clean_query or not self._chunks:
+        if not clean_query or not self._chunks or top_k <= 0:
             return []
 
         query_tokens = self._tokenize(clean_query)
+
+        if not query_tokens:
+            return []
+
         query_vector = Counter(query_tokens)
+        normalized_query = " ".join(query_tokens)
+
+        allowed_document_ids = (
+            set(document_ids)
+            if document_ids is not None
+            else None
+        )
 
         scored_results: list[DocumentSearchResult] = []
 
         for chunk in self._chunks:
+            if (
+                allowed_document_ids is not None
+                and chunk.document_id not in allowed_document_ids
+            ):
+                continue
+
             chunk_tokens = self._tokenize(chunk.text)
+
+            if not chunk_tokens:
+                continue
+
             chunk_vector = Counter(chunk_tokens)
 
-            score = self._cosine_similarity(
+            cosine_score = self._cosine_similarity(
                 query_vector,
                 chunk_vector,
             )
 
-            if score <= 0:
-                score = 0.000001
+            matched_query_tokens = (
+                set(query_tokens) & set(chunk_tokens)
+            )
+
+            if not matched_query_tokens:
+                continue
+
+            keyword_coverage = (
+                len(matched_query_tokens)
+                / len(set(query_tokens))
+            )
+
+            normalized_chunk = " ".join(chunk_tokens)
+
+            phrase_score = (
+                1.0
+                if normalized_query in normalized_chunk
+                else 0.0
+            )
+
+            final_score = (
+                0.70 * cosine_score
+                + 0.20 * phrase_score
+                + 0.10 * keyword_coverage
+            )
+
+            if final_score <= 0:
+                continue
 
             scored_results.append(
                 DocumentSearchResult(
@@ -126,7 +173,7 @@ class DocumentRAGService:
                     document_id=chunk.document_id,
                     filename=chunk.filename,
                     text=chunk.text,
-                    score=round(score, 6),
+                    score=round(final_score, 6),
                     page_number=chunk.page_number,
                     section_type=chunk.section_type,
                     chunk_index=chunk.chunk_index,
@@ -134,12 +181,14 @@ class DocumentRAGService:
             )
 
         scored_results.sort(
-            key=lambda item: item.score,
+            key=lambda item: (
+                item.score,
+                -item.chunk_index,
+            ),
             reverse=True,
         )
 
         return scored_results[:top_k]
-
     def _split_text(self, text: str) -> list[str]:
         clean_text = re.sub(
             r"\n{3,}",
@@ -295,4 +344,5 @@ class DocumentRAGService:
             return "section"
 
         return "text"
+
 
