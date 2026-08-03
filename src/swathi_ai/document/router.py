@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from swathi_ai.document.embedding import embed
 from swathi_ai.document.schemas import AskRequest, SearchRequest
-from swathi_ai.document.service import DocumentService
+from swathi_ai.document.service import DocumentRAGService
 from swathi_ai.document.vector_store import VectorStore
 
 
@@ -41,7 +41,7 @@ async def upload_document(
         )
 
     try:
-        service = DocumentService()
+        service = DocumentRAGService()
 
         result = await service.upload(file)
 

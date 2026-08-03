@@ -83,9 +83,8 @@ class RAGContextBuilder:
             )
 
         search_results = self.document_service.search(
-            query=clean_query,
-            top_k=resolved_top_k,
-            document_id=document_id,
+        query=query,
+        document_ids=[document_id],
         )
 
         filtered_results = [

@@ -19,6 +19,7 @@ from fastapi import (
 from fastapi.security import OAuth2PasswordRequestForm
 from .vision_service import get_vision_service
 from pydantic import BaseModel, Field
+from datetime import UTC, datetime
 
 from .auth import (
     RegisterRequest,
@@ -55,6 +56,20 @@ app = FastAPI(
     version="2.5.0",
 )
 
+
+
+
+@app.get(
+    "/health",
+    tags=["System"],
+    summary="Check service health",
+)
+def health_check() -> dict[str, str]:
+    return {
+        "status": "healthy",
+        "service": "swathi-ai-api",
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
 
 logging.basicConfig(
     level=logging.INFO,
@@ -664,7 +679,7 @@ def search_documents(
                 score=float(item.score),
                 page_number=getattr(item, "page_number", None),
                 section_type=getattr(item, "section_type", None),
-                chunk_index=getattr(item, "chunk_index", None),
+                chunk_index=int(getattr(item, "chunk_index", 0) or 0),
             )
             for item in results
         ]

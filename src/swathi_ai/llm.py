@@ -711,7 +711,7 @@ class LLMClient:
             getattr(self.settings, name, "") or ""
         ).strip()
 
-    def _fail(self, message: str) -> None:
+    def _fail(self, message: str) -> str | None:
         self.last_error = message
         logger.error(message)
         return None

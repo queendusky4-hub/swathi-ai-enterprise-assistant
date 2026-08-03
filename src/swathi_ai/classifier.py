@@ -16,30 +16,80 @@ class IntentClassifier:
 
     @property
     def available(self) -> bool:
-        return self.model_path.exists() and any(self.model_path.iterdir())
+        return (
+            self.model_path.exists()
+            and any(self.model_path.iterdir())
+        )
 
     def load(self) -> bool:
         if not self.available:
             return False
+
         try:
             import torch
             from transformers import pipeline
-            self._pipeline = pipeline("text-classification", model=str(self.model_path), tokenizer=str(self.model_path), device=0 if torch.cuda.is_available() else -1)
+
+            self._pipeline = pipeline(
+                "text-classification",
+                model=str(self.model_path),
+                tokenizer=str(self.model_path),
+                device=(
+                    0
+                    if torch.cuda.is_available()
+                    else -1
+                ),
+            )
             return True
-        except Exception as exc:  # model loading should not crash the app
-            logger.exception("Could not load intent model: %s", exc)
+
+        except Exception as exc:
+            logger.exception(
+                "Could not load intent model: %s",
+                exc,
+            )
             self._pipeline = None
             return False
 
-    def predict(self, text: str) -> tuple[str, float] | None:
+    def predict(
+        self,
+        text: str,
+    ) -> tuple[str, float] | None:
         if self._pipeline is None and not self.load():
             return None
+
         try:
-            result = self._pipeline(text)[0]
+            classifier_pipeline = self._pipeline
+
+            if classifier_pipeline is None:
+                return None
+
+            result = classifier_pipeline(text)[0]
+
             label_text = str(result["label"])
-            label_id = int(label_text.split("_")[-1]) if "_" in label_text else int(label_text)
+
+            label_id = (
+                int(label_text.split("_")[-1])
+                if "_" in label_text
+                else int(label_text)
+            )
+
             intent = LABEL_MAP.get(label_id)
-            return (intent, float(result["score"])) if intent else None
-        except (KeyError, ValueError, TypeError) as exc:
-            logger.warning("Invalid classifier output: %s", exc)
+
+            if intent is None:
+                return None
+
+            return (
+                intent,
+                float(result["score"]),
+            )
+
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+            IndexError,
+        ) as exc:
+            logger.warning(
+                "Invalid classifier output: %s",
+                exc,
+            )
             return None

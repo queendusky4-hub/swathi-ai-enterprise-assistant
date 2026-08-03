@@ -15,7 +15,7 @@ def read_pdf(path: Path):
 
 
 def read_docx(path: Path):
-    doc = Document(path)
+    doc = Document(str(path))
 
     text = "\n".join(p.text for p in doc.paragraphs)
 
