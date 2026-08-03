@@ -18,3 +18,9 @@ model/*
 backups/
 src/swathi_ai/*_backup.py
 src/swathi_ai/*_backup_*.py
+.coverage
+coverage.xml
+htmlcov/
+mlruns/
+mlartifacts/
+*.db
