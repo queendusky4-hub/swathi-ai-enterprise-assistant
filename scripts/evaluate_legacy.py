@@ -1,6 +1,6 @@
 from transformers import pipeline
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
-import numpy as np
+#import numpy as np
 
 LABEL_MAP = {
     0: "greeting",

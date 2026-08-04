@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-#from typing import Annotated, Literal
-#from uuid import uuid4
+import asyncio
+import json
 from typing import Annotated, Literal
-import logging
-from time import perf_counter
 from uuid import uuid4
 from .database import Base, engine
-from . import models
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 
 from .config import settings
 from .auth import (
-    LoginRequest,
     RegisterRequest,
     TokenResponse,
     UserRecord,
@@ -52,71 +49,6 @@ app = FastAPI(
 )
 
 Base.metadata.create_all(bind=engine)
-
-# =========================================================
-# Logging and performance monitoring
-# =========================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-
-logger = logging.getLogger("swathi_ai.api")
-
-
-@app.middleware("http")
-async def request_logging_middleware(
-    request: Request,
-    call_next,
-):
-    request_id = (
-        request.headers.get("X-Request-ID")
-        or str(uuid4())
-    )
-
-    started_at = perf_counter()
-
-    try:
-        response = await call_next(request)
-
-    except Exception:
-        elapsed_ms = (
-            perf_counter() - started_at
-        ) * 1000
-
-        logger.exception(
-            "request_failed request_id=%s "
-            "method=%s path=%s duration_ms=%.2f",
-            request_id,
-            request.method,
-            request.url.path,
-            elapsed_ms,
-        )
-
-        raise
-
-    elapsed_ms = (
-        perf_counter() - started_at
-    ) * 1000
-
-    response.headers["X-Request-ID"] = request_id
-    response.headers["X-Process-Time-Ms"] = (
-        f"{elapsed_ms:.2f}"
-    )
-
-    logger.info(
-        "request_completed request_id=%s "
-        "method=%s path=%s status=%s "
-        "duration_ms=%.2f",
-        request_id,
-        request.method,
-        request.url.path,
-        response.status_code,
-        elapsed_ms,
-    )
-
-    return response
 
 # =========================================================
 # Chat schemas
@@ -288,6 +220,7 @@ def root() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
         "chat": "/chat",
+        "chat_stream": "/chat/stream",
         "model_status": "/model/status",
         "document_upload": "/documents/upload",
         "document_search": "/documents/search",
@@ -373,6 +306,76 @@ def chat(
         source=result.source,
         intent=result.intent,
         confidence=result.confidence,
+    )
+
+
+@app.post("/chat/stream")
+def chat_stream(
+    request: ChatRequest,
+    current_user: Annotated[
+        UserRecord,
+        Depends(get_current_user),
+    ],
+) -> StreamingResponse:
+    """Stream a chat reply as Server-Sent Events (SSE).
+
+    The current response engine returns a completed answer, so this endpoint
+    streams that answer in small chunks. The SSE contract can later be wired
+    directly to a native model token generator without changing clients.
+    """
+    repository = get_repository()
+    engine = get_engine()
+    session_id = request.session_id or f"api_{uuid4()}"
+
+    history = repository.load(current_user.id, session_id)
+    result = engine.respond(
+        text=request.message,
+        online=request.online,
+        response_format=request.response_format,
+        history=history,
+    )
+
+    repository.save(
+        user_id=current_user.id,
+        session_id=session_id,
+        role="user",
+        message=request.message,
+    )
+    repository.save(
+        user_id=current_user.id,
+        session_id=session_id,
+        role="assistant",
+        message=result.text,
+    )
+
+    async def event_stream():
+        metadata = {
+            "type": "metadata",
+            "session_id": session_id,
+            "source": result.source,
+            "intent": result.intent,
+            "confidence": result.confidence,
+        }
+        yield f"data: {json.dumps(metadata, ensure_ascii=False)}\n\n"
+
+        words = result.text.split(" ")
+        for index, word in enumerate(words):
+            chunk = word if index == len(words) - 1 else word + " "
+            payload = {"type": "token", "content": chunk}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            await asyncio.sleep(0)
+
+        done = {"type": "done", "reply": result.text}
+        yield f"data: {json.dumps(done, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 # =========================================================

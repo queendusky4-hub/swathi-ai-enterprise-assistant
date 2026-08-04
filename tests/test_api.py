@@ -39,11 +39,12 @@ def test_health() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "ok"
-    assert body["application"] == "Swathi AI"
-    assert body["version"]
 
+    body = response.json()
+
+    assert body["status"] == "healthy"
+    assert body["service"] == "swathi-ai-api"
+    assert body["timestamp"]
 
 def test_chat_known_intent() -> None:
     response = client.post(

@@ -107,5 +107,5 @@ def save_jsonl(dataset, filename="intent_dataset.jsonl"):
 if __name__ == "__main__":
     dataset = build_dataset(samples_per_class=700)
     save_jsonl(dataset)
-    print(f"Dataset created successfully: intent_dataset.jsonl")
+    print("Dataset created successfully: intent_dataset.jsonl")
     print(f"Total samples: {len(dataset)}")
