@@ -1,0 +1,30 @@
+[
+  {
+    "chunk_id": "chunk-ml-1",
+    "text": "Machine learning is a branch of artificial intelligence that enables systems to learn patterns from data."
+  },
+  {
+    "chunk_id": "chunk-faiss-1",
+    "text": "FAISS is a vector similarity search library used to retrieve semantically similar embeddings efficiently."
+  },
+  {
+    "chunk_id": "chunk-bm25-1",
+    "text": "BM25 is a lexical ranking algorithm that scores documents based on term frequency and inverse document frequency."
+  },
+  {
+    "chunk_id": "chunk-hybrid-1",
+    "text": "Hybrid RAG combines lexical retrieval such as BM25 with semantic vector retrieval such as FAISS."
+  },
+  {
+    "chunk_id": "chunk-embedding-1",
+    "text": "Sentence Transformers generate dense vector embeddings that represent the semantic meaning of text."
+  },
+  {
+    "chunk_id": "chunk-cloud-1",
+    "text": "Cloud deployment can use containers, CI/CD pipelines, monitoring, and scalable infrastructure."
+  },
+  {
+    "chunk_id": "chunk-database-1",
+    "text": "SQLite is a lightweight relational database commonly used for local application persistence."
+  }
+]
