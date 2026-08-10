@@ -1,4 +1,7 @@
 [core]
-    remote = localstorage
+    remote = azurestorage
 ['remote "localstorage"']
     url = ../.dvc-storage
+['remote "azurestorage"']
+    url = azure://swathi-ai-dvc
+    account_name = swathiaidvc2026
