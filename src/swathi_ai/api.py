@@ -5,6 +5,10 @@ from time import perf_counter
 from typing import Any, Literal
 from uuid import uuid4
 from collections import Counter
+from .monitoring import (
+    metrics_response,
+    prometheus_http_middleware,
+)
 
 from fastapi import (
     Depends,
@@ -56,7 +60,9 @@ app = FastAPI(
     version="2.5.0",
 )
 
-
+app.middleware("http")(
+    prometheus_http_middleware
+)
 
 
 @app.get(
@@ -117,6 +123,12 @@ async def request_logging_middleware(
 auth_service = get_auth_service()
 get_current_user = create_current_user_dependency(auth_service)
 
+@app.get(
+    "/metrics",
+    include_in_schema=False,
+)
+def metrics():
+    return metrics_response()
 
 # ---------------------------------------------------------------------
 # REQUEST AND RESPONSE SCHEMAS

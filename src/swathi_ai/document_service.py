@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from collections import Counter
 from dataclasses import dataclass
 from uuid import uuid4
 
 from rank_bm25 import BM25Okapi
 
+
 from .documents import extract_document_text
 from .embeddings import EmbeddingService
 from .mlflow_tracker import MLflowTracker
 from .vector_store import FaissVectorStore
-
+from .monitoring import (
+    RAG_RESULTS_TOTAL,
+    RAG_SEARCH_DURATION_SECONDS,
+    RAG_SEARCHES_TOTAL,
+)
 
 @dataclass
 class DocumentUploadResult:
@@ -138,37 +144,48 @@ class DocumentRAGService:
         top_k: int = 5,
         document_ids: list[str] | None = None,
     ) -> list[DocumentSearchResult]:
-        if self.tracker is None:
-            return self._search_internal(
-                query=query,
-                top_k=top_k,
-                document_ids=document_ids,
-            )
+        start_time = time.perf_counter()
+        RAG_SEARCHES_TOTAL.inc()
 
-        embedding_model = getattr(
-            self.embedding_service,
-            "model_name",
-            self.embedding_service.__class__.__name__,
-        )
+        try:
+            if self.tracker is None:
+                results = self._search_internal(
+                    query=query,
+                    top_k=top_k,
+                    document_ids=document_ids,
+                )
+            else:
+                embedding_model = getattr(
+                    self.embedding_service,
+                    "model_name",
+                    self.embedding_service.__class__.__name__,
+                )
 
-        with self.tracker.measure_retrieval(
-            query=query,
-            retrieval_method="hybrid-bm25-faiss",
-            top_k=top_k,
-            embedding_model=str(embedding_model),
-        ) as metrics:
-            results = self._search_internal(
-                query=query,
-                top_k=top_k,
-                document_ids=document_ids,
-            )
-            metrics["retrieved_chunks"] = len(results)
-            metrics["average_score"] = (
-                sum(result.score for result in results) / len(results)
-                if results
-                else 0.0
-            )
+                with self.tracker.measure_retrieval(
+                    query=query,
+                    retrieval_method="hybrid-bm25-faiss",
+                    top_k=top_k,
+                    embedding_model=str(embedding_model),
+                ) as metrics:
+                    results = self._search_internal(
+                        query=query,
+                        top_k=top_k,
+                        document_ids=document_ids,
+                    )
+
+                    metrics["retrieved_chunks"] = len(results)
+                    metrics["average_score"] = (
+                        sum(result.score for result in results) / len(results)
+                        if results
+                        else 0.0
+                    )
+
+            RAG_RESULTS_TOTAL.inc(len(results))
             return results
+
+        finally:
+            duration = time.perf_counter() - start_time
+            RAG_SEARCH_DURATION_SECONDS.observe(duration)
 
     def _search_internal(
         self,
