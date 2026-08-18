@@ -26,3 +26,11 @@ mlartifacts/
 *.db
 .dvc-storage/
 artifacts/
+
+Dockerfile.v4
+Dockerfile.v5
+Dockerfile.v6
+app-storage.yaml
+swathi-containerapp-storage.yaml
+swathi-containerapp.yaml
+build/
