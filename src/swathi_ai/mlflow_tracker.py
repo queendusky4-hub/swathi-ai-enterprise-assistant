@@ -30,7 +30,9 @@ class MLflowTracker:
         self.experiment_name = experiment_name
 
         if tracking_directory is None:
-            tracking_directory = Path("mlruns")
+           tracking_directory = Path(
+            os.getenv("MLFLOW_TRACKING_DIR", "mlruns")
+    )
 
         tracking_directory.mkdir(
             parents=True,

@@ -13,9 +13,12 @@ class ChatRepository:
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
-            self.path,
-            check_same_thread=False,
-        )
+           self.path,
+           timeout=60.0,
+           check_same_thread=False,
+    )
+
+        connection.execute("PRAGMA busy_timeout = 60000")
         connection.row_factory = sqlite3.Row
         return connection
 
@@ -283,9 +286,12 @@ class AuthRepository:
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
-            self.path,
-            check_same_thread=False,
-        )
+           self.path,
+           timeout=60.0,
+           check_same_thread=False,
+     )
+
+        connection.execute("PRAGMA busy_timeout = 60000")
 
         connection.row_factory = sqlite3.Row
         return connection

@@ -26,8 +26,13 @@ RULES: Final = {
 
 
 def rule_based_intent(text: str) -> str | None:
-    value = f" {clean_text(text)}"
+    value = f" {clean_text(text)} "
+
     for intent, keywords in RULES.items():
-        if any(keyword in value for keyword in keywords):
-            return intent
+        for keyword in keywords:
+            cleaned_keyword = clean_text(keyword)
+
+            if f" {cleaned_keyword} " in value:
+                return intent
+
     return None

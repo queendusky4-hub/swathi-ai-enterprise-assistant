@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from .database import Base, engine
 from typing import Annotated, Literal
 from uuid import uuid4
-from .database import Base, engine
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
