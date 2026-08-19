@@ -11,6 +11,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+import os
+import requests
 
 import requests
 import speech_recognition as sr
@@ -915,64 +917,75 @@ def transcribe_audio(
     audio_bytes: bytes,
     response_format: str,
 ) -> str | None:
-    recognizer = sr.Recognizer()
+    api_key = os.getenv("OPENAI_API_KEY")
 
-    primary_language = get_recognition_language(
-        response_format
-    )
-
-    if response_format == "Tamil only":
-        languages = ["ta-IN"]
-
-    elif response_format == "English only":
-        languages = ["en-GB", "en-IN", "en-US"]
-
-    elif response_format == "Tanglish only":
-        languages = ["en-IN", "en-GB", "ta-IN"]
-
-    else:
-        # Auto detect / All three
-        languages = [
-            primary_language,
-            "en-GB",
-            "en-IN",
-            "ta-IN",
-            "en-US",
-        ]
-
-    # Remove duplicates while keeping order
-    languages = list(dict.fromkeys(languages))
+    if not api_key:
+        st.sidebar.error(
+            "OPENAI_API_KEY is not configured."
+        )
+        return None
 
     try:
         wav_buffer = convert_audio_to_wav(
             audio_bytes
         )
 
-        with sr.AudioFile(wav_buffer) as source:
-            audio = recognizer.record(source)
+        language_map = {
+            "Tamil only": "ta",
+            "English only": "en",
+            "Tanglish only": "en",
+            "All three": None,
+            "Auto detect": None,
+        }
 
-        for language in languages:
-            try:
-                recognised_text = recognizer.recognize_google(
-                    audio,
-                    language=language,
-                )
-
-                if recognised_text.strip():
-                    return recognised_text.strip()
-
-            except sr.UnknownValueError:
-                continue
-
-        st.sidebar.warning(
-            "The recording could not be understood. "
-            "Please speak clearly and try again."
+        language = language_map.get(
+            response_format
         )
-        return None
 
-    except sr.RequestError as error:
+        files = {
+            "file": (
+                "voice.wav",
+                wav_buffer.getvalue(),
+                "audio/wav",
+            )
+        }
+
+        data = {
+            "model": "gpt-4o-mini-transcribe",
+        }
+
+        if language:
+            data["language"] = language
+
+        response = requests.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={
+                "Authorization": f"Bearer {api_key}"
+            },
+            files=files,
+            data=data,
+            timeout=60,
+        )
+
+        response.raise_for_status()
+
+        result = response.json()
+
+        recognised_text = (
+            result.get("text", "").strip()
+        )
+
+        if not recognised_text:
+            st.sidebar.warning(
+                "No speech could be recognised."
+            )
+            return None
+
+        return recognised_text
+
+    except requests.RequestException as error:
         st.sidebar.error(
-            "Speech recognition is unavailable: "
+            "Speech recognition failed: "
             f"{error}"
         )
         return None
