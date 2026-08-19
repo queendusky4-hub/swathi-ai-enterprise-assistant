@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 API_BASE_URL = os.getenv(
     "API_BASE_URL",
-    "http://127.0.0.1:8002",
+    "https://swathi-ai-api.greenfield-1c4903da.polandcentral.azurecontainerapps.io",
 ).rstrip("/")
 
 REQUEST_TIMEOUT = 90
@@ -917,9 +917,31 @@ def transcribe_audio(
 ) -> str | None:
     recognizer = sr.Recognizer()
 
-    recognition_language = get_recognition_language(
+    primary_language = get_recognition_language(
         response_format
     )
+
+    if response_format == "Tamil only":
+        languages = ["ta-IN"]
+
+    elif response_format == "English only":
+        languages = ["en-GB", "en-IN", "en-US"]
+
+    elif response_format == "Tanglish only":
+        languages = ["en-IN", "en-GB", "ta-IN"]
+
+    else:
+        # Auto detect / All three
+        languages = [
+            primary_language,
+            "en-GB",
+            "en-IN",
+            "ta-IN",
+            "en-US",
+        ]
+
+    # Remove duplicates while keeping order
+    languages = list(dict.fromkeys(languages))
 
     try:
         wav_buffer = convert_audio_to_wav(
@@ -929,14 +951,19 @@ def transcribe_audio(
         with sr.AudioFile(wav_buffer) as source:
             audio = recognizer.record(source)
 
-        recognised_text = recognizer.recognize_google(
-            audio,
-            language=recognition_language,
-        )
+        for language in languages:
+            try:
+                recognised_text = recognizer.recognize_google(
+                    audio,
+                    language=language,
+                )
 
-        return recognised_text.strip()
+                if recognised_text.strip():
+                    return recognised_text.strip()
 
-    except sr.UnknownValueError:
+            except sr.UnknownValueError:
+                continue
+
         st.sidebar.warning(
             "The recording could not be understood. "
             "Please speak clearly and try again."
@@ -950,31 +977,10 @@ def transcribe_audio(
         )
         return None
 
-    except FileNotFoundError:
+    except Exception as error:
         st.sidebar.error(
-            "FFmpeg could not be found by Python."
-        )
-        return None
-
-    except RuntimeError as error:
-        logger.exception(
-            "Audio conversion failed: %s",
-            error,
-        )
-        st.sidebar.error(str(error))
-        return None
-
-    except (
-        ValueError,
-        OSError,
-        EOFError,
-    ) as error:
-        logger.exception(
-            "Audio processing failed: %s",
-            error,
-        )
-        st.sidebar.error(
-            "The recorded audio could not be processed."
+            "Voice processing failed: "
+            f"{error}"
         )
         return None
 
