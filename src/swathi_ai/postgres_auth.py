@@ -7,20 +7,42 @@ from psycopg.rows import dict_row
 
 
 class PostgresAuthRepository:
-    def __init__(self, database_url: str) -> None:
-        if not database_url:
+    def __init__(
+        self,
+        host: str,
+        database: str,
+        user: str,
+        password: str,
+    ) -> None:
+        if not all(
+            [
+                host.strip(),
+                database.strip(),
+                user.strip(),
+                password,
+            ]
+        ):
             raise ValueError(
-                "AUTH_DATABASE_URL is not configured."
+                "PostgreSQL authentication settings are incomplete."
             )
 
-        self.database_url = database_url
+        self.host = host.strip()
+        self.database = database.strip()
+        self.user = user.strip()
+        self.password = password
+
         self.init_db()
 
     def connect(self):
         return psycopg.connect(
-            self.database_url,
-            row_factory=dict_row,
+            host=self.host,
+            dbname=self.database,
+            user=self.user,
+            password=self.password,
+            port=5432,
+            sslmode="require",
             connect_timeout=15,
+            row_factory=dict_row,
         )
 
     def init_db(self) -> None:
