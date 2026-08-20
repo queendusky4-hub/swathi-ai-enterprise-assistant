@@ -30,8 +30,7 @@ class PostgresAuthRepository:
         self.database = database.strip()
         self.user = user.strip()
         self.password = password
-
-        self.init_db()
+        self._initialized = False
 
     def connect(self):
         return psycopg.connect(
@@ -44,6 +43,13 @@ class PostgresAuthRepository:
             connect_timeout=15,
             row_factory=dict_row,
         )
+
+    def _ensure_initialized(self) -> None:
+        if self._initialized:
+            return
+
+        self.init_db()
+        self._initialized = True
 
     def init_db(self) -> None:
         with self.connect() as conn:
@@ -91,6 +97,8 @@ class PostgresAuthRepository:
         password_salt: str,
         role: str = "user",
     ) -> dict:
+        self._ensure_initialized()
+
         with self.connect() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -135,6 +143,8 @@ class PostgresAuthRepository:
         self,
         username: str,
     ) -> dict | None:
+        self._ensure_initialized()
+
         with self.connect() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -162,6 +172,8 @@ class PostgresAuthRepository:
         user_id: int,
         expires_at: str,
     ) -> None:
+        self._ensure_initialized()
+
         with self.connect() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -190,6 +202,8 @@ class PostgresAuthRepository:
         self,
         token: str,
     ) -> dict | None:
+        self._ensure_initialized()
+
         with self.connect() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -215,6 +229,8 @@ class PostgresAuthRepository:
         self,
         token: str,
     ) -> None:
+        self._ensure_initialized()
+
         with self.connect() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
