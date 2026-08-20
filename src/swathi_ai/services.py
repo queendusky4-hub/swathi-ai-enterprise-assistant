@@ -21,9 +21,16 @@ def get_repository() -> ChatRepository:
 
 @lru_cache(maxsize=1)
 def get_auth_service() -> AuthService:
-    if settings.auth_database_url:
+    if (
+        settings.auth_db_host
+        and settings.auth_db_user
+        and settings.auth_db_password
+    ):
         repository = PostgresAuthRepository(
-            settings.auth_database_url
+            host=settings.auth_db_host,
+            database=settings.auth_db_name,
+            user=settings.auth_db_user,
+            password=settings.auth_db_password,
         )
     else:
         repository = AuthRepository(

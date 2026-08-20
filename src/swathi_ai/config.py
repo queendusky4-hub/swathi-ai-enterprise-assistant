@@ -6,37 +6,93 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 load_dotenv(PROJECT_ROOT / ".env")
 
 
 def resolve_project_path(value: str) -> Path:
     path = Path(value).expanduser()
-    return path if path.is_absolute() else PROJECT_ROOT / path
+
+    return (
+        path
+        if path.is_absolute()
+        else PROJECT_ROOT / path
+    )
 
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = os.getenv("APP_NAME", "Swathi AI")
-    database_path: Path = resolve_project_path(
-        os.getenv("DATABASE_PATH", "data/chat_history.db")
+    app_name: str = os.getenv(
+        "APP_NAME",
+        "Swathi AI",
     )
 
-    auth_database_url: str = os.getenv(
-        "AUTH_DATABASE_URL",
+    database_path: Path = resolve_project_path(
+        os.getenv(
+            "DATABASE_PATH",
+            "data/chat_history.db",
+        )
+    )
+
+    # PostgreSQL authentication database
+    auth_db_host: str = os.getenv(
+        "AUTH_DB_HOST",
         "",
     ).strip()
 
+    auth_db_name: str = os.getenv(
+        "AUTH_DB_NAME",
+        "postgres",
+    ).strip()
 
-    model_path: Path = resolve_project_path(os.getenv("MODEL_PATH", "model"))
-    confidence_threshold: float = float(
-        os.getenv("CONFIDENCE_THRESHOLD", "0.55")
+    auth_db_user: str = os.getenv(
+        "AUTH_DB_USER",
+        "",
+    ).strip()
+
+    auth_db_password: str = os.getenv(
+        "AUTH_DB_PASSWORD",
+        "",
+    ).strip()
+
+    # ML / intent classifier
+    model_path: Path = resolve_project_path(
+        os.getenv(
+            "MODEL_PATH",
+            "model",
+        )
     )
-    llm_base_url: str = os.getenv("LLM_BASE_URL", "").strip()
-    llm_api_key: str = os.getenv("LLM_API_KEY", "").strip()
-    llm_model: str = os.getenv("LLM_MODEL", "").strip()
+
+    confidence_threshold: float = float(
+        os.getenv(
+            "CONFIDENCE_THRESHOLD",
+            "0.55",
+        )
+    )
+
+    # Online LLM configuration
+    llm_base_url: str = os.getenv(
+        "LLM_BASE_URL",
+        "",
+    ).strip()
+
+    llm_api_key: str = os.getenv(
+        "LLM_API_KEY",
+        "",
+    ).strip()
+
+    llm_model: str = os.getenv(
+        "LLM_MODEL",
+        "",
+    ).strip()
+
     llm_timeout_seconds: int = int(
-        os.getenv("LLM_TIMEOUT_SECONDS", "60")
+        os.getenv(
+            "LLM_TIMEOUT_SECONDS",
+            "60",
+        )
     )
 
 
