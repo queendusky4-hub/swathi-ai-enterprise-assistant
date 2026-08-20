@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 import os
 import requests
+from dotenv import load_dotenv
+import base64
 
 import requests
 import speech_recognition as sr
@@ -21,6 +23,7 @@ from streamlit_mic_recorder import mic_recorder
 
 from swathi_ai.config import settings
 from swathi_ai.services import get_engine, get_repository
+load_dotenv()
 
 
 # ---------------------------------------------------------------------
@@ -966,11 +969,35 @@ def transcribe_audio(
     audio_bytes: bytes,
     response_format: str,
 ) -> str | None:
-    api_key = os.getenv("OPENAI_API_KEY")
+    gemini_api_key = os.getenv(
+        "LLM_API_KEY",
+        "",
+    ).strip()
 
-    if not api_key:
+    gemini_base_url = os.getenv(
+        "LLM_BASE_URL",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+    ).rstrip("/")
+
+    gemini_model = os.getenv(
+        "LLM_MODEL",
+        "gemini-3.5-flash-lite",
+    ).strip()
+
+    if not gemini_api_key:
+        try:
+            gemini_api_key = str(
+                st.secrets.get(
+                    "LLM_API_KEY",
+                    "",
+                )
+            ).strip()
+        except Exception:
+            gemini_api_key = ""
+
+    if not gemini_api_key:
         st.sidebar.error(
-            "OPENAI_API_KEY is not configured."
+            "Gemini API key is not configured."
         )
         return None
 
@@ -979,56 +1006,164 @@ def transcribe_audio(
             audio_bytes
         )
 
-        language_map = {
-            "Tamil only": "ta",
-            "English only": "en",
-            "Tanglish only": "en",
-            "All three": None,
-            "Auto detect": None,
+        wav_bytes = wav_buffer.getvalue()
+
+        encoded_audio = base64.b64encode(
+            wav_bytes
+        ).decode("utf-8")
+
+        language_instructions = {
+            "Tamil only": (
+                "The speaker is speaking Tamil. "
+                "Transcribe the speech accurately in Tamil script."
+            ),
+            "English only": (
+                "The speaker is speaking English. "
+                "Transcribe the speech accurately in English."
+            ),
+            "Tanglish only": (
+                "The speaker may use Tanglish, meaning Tamil spoken "
+                "using English/Roman letters, possibly mixed with English. "
+                "Return the transcription in Roman/English letters."
+            ),
+            "All three": (
+                "The speaker may use Tamil, Tanglish, English, "
+                "or a mixture of them. Preserve the language actually spoken."
+            ),
+            "Auto detect": (
+                "Automatically detect whether the speech is Tamil, "
+                "Tanglish, English, or mixed, and transcribe it accurately."
+            ),
         }
 
-        language = language_map.get(
-            response_format
+        instruction = language_instructions.get(
+            response_format,
+            language_instructions["Auto detect"],
         )
 
-        files = {
-            "file": (
-                "voice.wav",
-                wav_buffer.getvalue(),
-                "audio/wav",
-            )
+        payload = {
+            "model": gemini_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                f"{instruction} "
+                                "Return ONLY the transcription. "
+                                "Do not explain, translate, summarize, "
+                                "or add quotation marks."
+                            ),
+                        },
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": encoded_audio,
+                                "format": "wav",
+                            },
+                        },
+                    ],
+                }
+            ],
+            "temperature": 0,
         }
-
-        data = {
-            "model": "gpt-4o-mini-transcribe",
-        }
-
-        if language:
-            data["language"] = language
 
         response = requests.post(
-            "https://api.openai.com/v1/audio/transcriptions",
+            f"{gemini_base_url}/chat/completions",
             headers={
-                "Authorization": f"Bearer {api_key}"
+                "Authorization": (
+                    f"Bearer {gemini_api_key}"
+                ),
+                "Content-Type": "application/json",
             },
-            files=files,
-            data=data,
+            json=payload,
             timeout=60,
         )
 
-        response.raise_for_status()
+        if response.status_code == 429:
+            st.sidebar.warning(
+                "Gemini voice limit reached temporarily. "
+                "Please wait a moment and try again."
+            )
+            return None
+
+        if response.status_code == 401:
+            st.sidebar.error(
+                "Gemini API authentication failed."
+            )
+            return None
+
+        if response.status_code >= 400:
+            try:
+                error_detail = response.json()
+            except ValueError:
+                error_detail = response.text
+
+            st.sidebar.error(
+                "Gemini voice transcription failed: "
+                f"{response.status_code} - {error_detail}"
+            )
+            return None
 
         result = response.json()
 
-        recognised_text = (
-            result.get("text", "").strip()
+        choices = result.get(
+            "choices",
+            [],
         )
+
+        if not choices:
+            st.sidebar.warning(
+                "Gemini returned no transcription."
+            )
+            return None
+
+        recognised_text = (
+            choices[0]
+            .get("message", {})
+            .get("content", "")
+        )
+
+        if isinstance(recognised_text, list):
+            recognised_text = " ".join(
+                str(item.get("text", ""))
+                for item in recognised_text
+                if isinstance(item, dict)
+            )
+
+        recognised_text = str(
+            recognised_text
+        ).strip()
 
         if not recognised_text:
             st.sidebar.warning(
                 "No speech could be recognised."
             )
             return None
+
+        return recognised_text
+
+    except requests.RequestException as error:
+        st.sidebar.error(
+            "Gemini voice request failed: "
+            f"{error}"
+        )
+        return None
+
+    except Exception as error:
+        st.sidebar.error(
+            "Voice processing failed: "
+            f"{error}"
+        )
+        return None
+
+    except Exception as error:
+        st.sidebar.error(
+            "Voice processing failed: "
+            f"{error}"
+        )
+        return None
 
         return recognised_text
 
