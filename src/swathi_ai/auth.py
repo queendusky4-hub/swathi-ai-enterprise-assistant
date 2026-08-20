@@ -51,6 +51,7 @@ class AuthService:
     ) -> None:
         self.repository = repository
         self.token_expiry_hours = token_expiry_hours
+        self._guest_tokens: dict[str, datetime] = {}
 
     @staticmethod
     def hash_password(
@@ -169,10 +170,36 @@ class AuthService:
 
         return token
 
+    def create_guest_access_token(self) -> str:
+        token = "guest_" + secrets.token_urlsafe(48)
+
+        expires_at = (
+            datetime.now(timezone.utc)
+            + timedelta(hours=self.token_expiry_hours)
+        )
+
+        self._guest_tokens[token] = expires_at
+
+        return token
+
     def get_user_from_token(
         self,
         token: str,
     ) -> dict | None:
+        guest_expiry = self._guest_tokens.get(token)
+
+        if guest_expiry is not None:
+            if guest_expiry <= datetime.now(timezone.utc):
+                self._guest_tokens.pop(token, None)
+                return None
+
+            return {
+                "id": 0,
+                "username": "Guest",
+                "role": "guest",
+                "expires_at": guest_expiry.isoformat(),
+            }
+
         user = self.repository.get_user_by_token(token)
 
         if user is None:

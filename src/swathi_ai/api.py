@@ -415,6 +415,20 @@ def login(
     )
 
 
+@app.post(
+    "/auth/guest",
+    response_model=TokenResponse,
+    tags=["Authentication"],
+)
+def guest_login() -> TokenResponse:
+    token = auth_service.create_guest_access_token()
+
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+    )
+
+
 @app.get(
     "/auth/me",
     response_model=UserResponse,

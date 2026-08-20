@@ -515,6 +515,55 @@ def login_user(
         return False, f"Could not connect to FastAPI: {error}"
 
 
+def login_as_guest() -> tuple[bool, str]:
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/auth/guest",
+            timeout=15,
+        )
+
+        if response.status_code != 200:
+            return False, _response_message(
+                response,
+                "Guest login is unavailable.",
+            )
+
+        data = response.json()
+        token = data.get("access_token")
+
+        if not token:
+            return False, (
+                "The guest login response did not "
+                "contain an access token."
+            )
+
+        st.session_state.access_token = token
+
+        profile_loaded, profile_message = (
+            load_current_user()
+        )
+
+        if not profile_loaded:
+            st.session_state.current_user = {
+                "id": 0,
+                "username": "Guest",
+                "role": "guest",
+            }
+
+            logger.warning(
+                "Guest login succeeded but profile "
+                "loading failed: %s",
+                profile_message,
+            )
+
+        return True, "Continuing as Guest."
+
+    except (requests.RequestException, ValueError) as error:
+        return False, (
+            f"Could not connect to FastAPI: {error}"
+        )
+
+
 def logout_user() -> None:
     st.session_state.access_token = None
     st.session_state.current_user = None
@@ -1171,6 +1220,26 @@ if not st.session_state.access_token:
                     st.rerun()
                 else:
                     st.error(message)
+
+        st.divider()
+
+        st.caption(
+            "Or continue without creating an account. "
+            "Guest sessions are temporary."
+        )
+
+        if st.button(
+            "Continue as Guest",
+            use_container_width=True,
+            key="guest_login_button",
+        ):
+            success, message = login_as_guest()
+
+            if success:
+                st.success(message)
+                st.rerun()
+            else:
+                st.error(message)
 
     with register_tab:
         with st.form("register_form", clear_on_submit=False):
