@@ -9,6 +9,7 @@ from .database import AuthRepository, ChatRepository
 from .document_service import DocumentRAGService
 from .engine import ChatEngine
 from .llm import LLMClient
+from .postgres_auth import PostgresAuthRepository
 
 
 @lru_cache(maxsize=1)
@@ -20,9 +21,14 @@ def get_repository() -> ChatRepository:
 
 @lru_cache(maxsize=1)
 def get_auth_service() -> AuthService:
-    repository = AuthRepository(
-        settings.database_path
-    )
+    if settings.auth_database_url:
+        repository = PostgresAuthRepository(
+            settings.auth_database_url
+        )
+    else:
+        repository = AuthRepository(
+            settings.database_path
+        )
 
     return AuthService(
         repository=repository,
@@ -57,7 +63,9 @@ def get_engine() -> ChatEngine:
         settings.model_path
     )
 
-    llm = LLMClient(settings)
+    llm = LLMClient(
+        settings
+    )
 
     document_service = get_document_service()
 

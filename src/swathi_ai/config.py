@@ -21,6 +21,13 @@ class Settings:
     database_path: Path = resolve_project_path(
         os.getenv("DATABASE_PATH", "data/chat_history.db")
     )
+
+    auth_database_url: str = os.getenv(
+        "AUTH_DATABASE_URL",
+        "",
+    ).strip()
+
+
     model_path: Path = resolve_project_path(os.getenv("MODEL_PATH", "model"))
     confidence_threshold: float = float(
         os.getenv("CONFIDENCE_THRESHOLD", "0.55")
