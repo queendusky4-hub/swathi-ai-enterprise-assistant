@@ -1,4 +1,16 @@
+
 # Swathi AI - Enterprise Multilingual AI Assistant
+
+## 🚀 Live Demo
+
+🌐 **Try Swathi AI:**  
+https://swathi-ai-enterprise-assistant-z3ocgep8uabuzmjqhzjmzp.streamlit.app
+
+Swathi AI is a production-deployed multilingual AI assistant supporting **English, Tamil, and Tanglish**, with BERT-based intent classification, LLM integration, document RAG, authentication, REST APIs, and cloud deployment.
+
+> **Demo:** No installation required. Open the live application and continue as a guest.
+
+
 
 Swathi AI is a production-deployed multilingual conversational AI platform designed to support **Tamil, Tanglish, and English** interactions.
 
@@ -8,6 +20,8 @@ The project demonstrates an end-to-end AI engineering workflow from machine-lear
 
 ---
 
+
+
 ## Application Preview
 
 ### Secure Authentication
@@ -16,7 +30,7 @@ The project demonstrates an end-to-end AI engineering workflow from machine-lear
 
 ### AI Conversation
 
-![Swathi AI Chat](docs/screenshots/Guestlogin.png)
+![Swathi AI Chat](docs/screenshots/Chat.png)
 
 ### Tamil, Tanglish and English Support
 
@@ -505,3 +519,4 @@ Production-ready release with multilingual AI, authentication, guest access, pas
 
 MSc Artificial Intelligence  
 AI / Machine Learning / Software Engineering Portfolio Project
+
