@@ -1,6 +1,15 @@
 
 # Swathi AI - Enterprise Multilingual AI Assistant
 
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-REST_API-009688.svg)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B.svg)](https://streamlit.io/)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg)](https://www.docker.com/)
+[![Azure](https://img.shields.io/badge/Azure-Container_Apps-0078D4.svg)](https://azure.microsoft.com/)
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF.svg)](https://github.com/features/actions)
+[![Tests](https://img.shields.io/badge/Tests-50_Passing-brightgreen.svg)](#testing)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 ## 🚀 Live Demo
 
 🌐 **Try Swathi AI:**  
