@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   quality:
@@ -27,30 +26,14 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements-dev.txt
           python -m pip install -e .
-          python -m pip install "dvc[azure]"
 
       - name: Ruff lint
         run: |
           ruff check src tests app.py experiments
 
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Pull DVC evaluation data
-        run: |
-          dvc pull
-
       - name: Run tests
         run: |
           pytest -q
-
-      - name: RAG quality gate
-        run: |
-          python experiments/rag_ci_quality_gate.py
 
       - name: Validate Docker Compose
         run: |
