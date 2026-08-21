@@ -70,6 +70,36 @@ flowchart TD
     S --> T[Azure Container Apps]
 ```
 
+---
+
+## 🧠 Key Engineering Decisions
+
+### Hybrid Retrieval for RAG
+The retrieval pipeline combines **semantic vector search (FAISS)** with **keyword-based retrieval (BM25)**. Semantic retrieval captures contextual similarity, while BM25 helps preserve exact-term matching. Combining both approaches improves retrieval coverage for multilingual and domain-specific queries.
+
+### Multilingual Intent Classification
+A **transformer-based BERT classifier** is used to identify user intent across **English, Tamil, and Tanglish**. Intent classification provides a routing layer before downstream AI processing and allows the system to handle multilingual conversational requests more systematically.
+
+### Separate Frontend and API Layers
+The application separates the **Streamlit user interface** from the **FastAPI backend**. This keeps presentation logic independent from AI and business logic and allows the backend to be consumed by other clients through REST APIs.
+
+### Secure Authentication
+Authentication is handled through dedicated API routes supporting **registration, login, guest access, password recovery, and protected endpoints**. Passwords are stored as hashes rather than plaintext, while authenticated requests use bearer-token based access.
+
+### Containerised Deployment
+The backend is packaged using **Docker**, providing a reproducible runtime environment across development, testing, and production.
+
+### Automated CI/CD
+**GitHub Actions** automates quality checks and the deployment workflow. Production containers are built and pushed to **Azure Container Registry** before deployment to **Azure Container Apps**, reducing manual deployment steps.
+
+### Testing and Code Quality
+The project includes an automated **Pytest** test suite alongside **Ruff** code-quality checks. These checks help detect regressions and maintain code quality as the application evolves.
+
+### Modular AI Architecture
+AI functionality is separated into dedicated components for intent classification, LLM interaction, document processing, retrieval, authentication, and persistence. This modular structure makes individual components easier to test, replace, and extend.
+
+---
+
 ## Application Preview
 
 ### Secure Authentication
