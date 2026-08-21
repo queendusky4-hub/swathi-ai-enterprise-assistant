@@ -419,6 +419,16 @@ def register_user(
         )
 
         if response.status_code in (200, 201):
+            data = response.json()
+
+            recovery_code = data.get(
+                "recovery_code"
+            )
+
+            if recovery_code:
+                st.session_state.last_recovery_code = (
+                    recovery_code
+                )
             return True, "Account created successfully. Please log in."
 
         return False, _response_message(
@@ -560,6 +570,36 @@ def login_as_guest() -> tuple[bool, str]:
             )
 
         return True, "Continuing as Guest."
+
+    except (requests.RequestException, ValueError) as error:
+        return False, (
+            f"Could not connect to FastAPI: {error}"
+        )
+
+
+def reset_user_password(
+    username: str,
+    recovery_code: str,
+    new_password: str,
+) -> tuple[bool, str]:
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/auth/reset-password",
+            json={
+                "username": username.strip().lower(),
+                "recovery_code": recovery_code.strip(),
+                "new_password": new_password,
+            },
+            timeout=15,
+        )
+
+        if response.status_code != 200:
+            return False, _response_message(
+                response,
+                "Password reset failed.",
+            )
+
+        return True, "Password reset successful."
 
     except (requests.RequestException, ValueError) as error:
         return False, (
@@ -1198,6 +1238,9 @@ if "access_token" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
 
+if "last_recovery_code" not in st.session_state:
+    st.session_state.last_recovery_code = None
+
 if "auth_page" not in st.session_state:
     st.session_state.auth_page = "Login"
 
@@ -1324,7 +1367,9 @@ if not st.session_state.access_token:
         )
         st.stop()
 
-    login_tab, register_tab = st.tabs(["Login", "Create account"])
+    login_tab, register_tab, forgot_tab = st.tabs(
+        ["Login", "Create account", "Forgot password"]
+    )
 
     with login_tab:
         with st.form("login_form", clear_on_submit=False):
@@ -1406,6 +1451,90 @@ if not st.session_state.access_token:
                 success, message = register_user(
                     username=register_username,
                     password=register_password,
+                )
+
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+
+
+        if st.session_state.get("last_recovery_code"):
+            st.success(
+                "Account created. Save this recovery code "
+                "somewhere safe. It is required if you forget "
+                "your password."
+            )
+
+            st.code(
+                st.session_state.last_recovery_code,
+                language=None,
+            )
+
+    with forgot_tab:
+        st.info(
+            "Enter the recovery code you received when "
+            "you created your account."
+        )
+
+        with st.form(
+            "forgot_password_form",
+            clear_on_submit=False,
+        ):
+            reset_username = st.text_input(
+                "Username",
+                key="reset_username",
+            )
+
+            recovery_code = st.text_input(
+                "Recovery code",
+                key="reset_recovery_code",
+            )
+
+            new_password = st.text_input(
+                "New password",
+                type="password",
+                key="reset_new_password",
+            )
+
+            confirm_new_password = st.text_input(
+                "Confirm new password",
+                type="password",
+                key="reset_confirm_password",
+            )
+
+            reset_submitted = st.form_submit_button(
+                "Reset password",
+                use_container_width=True,
+            )
+
+        if reset_submitted:
+            if (
+                not reset_username.strip()
+                or not recovery_code.strip()
+                or not new_password
+                or not confirm_new_password
+            ):
+                st.warning(
+                    "Complete every password reset field."
+                )
+
+            elif new_password != confirm_new_password:
+                st.error(
+                    "New passwords do not match."
+                )
+
+            elif len(new_password) < 8:
+                st.error(
+                    "Password must contain at least "
+                    "8 characters."
+                )
+
+            else:
+                success, message = reset_user_password(
+                    username=reset_username,
+                    recovery_code=recovery_code,
+                    new_password=new_password,
                 )
 
                 if success:

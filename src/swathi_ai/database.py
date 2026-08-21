@@ -305,6 +305,7 @@ class AuthRepository:
                     username TEXT NOT NULL UNIQUE,
                     password_hash TEXT NOT NULL,
                     password_salt TEXT NOT NULL,
+                    recovery_code_hash TEXT,
                     role TEXT NOT NULL DEFAULT 'user',
                     created_at TEXT NOT NULL
                 )
@@ -333,6 +334,14 @@ class AuthRepository:
                 """
             )
 
+            try:
+                conn.execute(
+                    "ALTER TABLE users "
+                    "ADD COLUMN recovery_code_hash TEXT"
+                )
+            except sqlite3.OperationalError:
+                pass
+
             conn.commit()
 
     def create_user(
@@ -341,6 +350,7 @@ class AuthRepository:
         password_hash: str,
         password_salt: str,
         role: str = "user",
+        recovery_code_hash: str | None = None,
     ) -> dict:
         with self.connect() as conn:
             cursor = conn.execute(
@@ -349,15 +359,17 @@ class AuthRepository:
                     username,
                     password_hash,
                     password_salt,
+                    recovery_code_hash,
                     role,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     username,
                     password_hash,
                     password_salt,
+                    recovery_code_hash,
                     role,
                     datetime.now(timezone.utc).isoformat(),
                 ),
@@ -385,6 +397,7 @@ class AuthRepository:
                     username,
                     password_hash,
                     password_salt,
+                    recovery_code_hash,
                     role,
                     created_at
                 FROM users
@@ -397,6 +410,37 @@ class AuthRepository:
             return None
 
         return dict(row)
+
+    def update_password(
+        self,
+        user_id: int,
+        password_hash: str,
+        password_salt: str,
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                '''
+                UPDATE users
+                SET password_hash = ?,
+                    password_salt = ?
+                WHERE id = ?
+                ''',
+                (
+                    password_hash,
+                    password_salt,
+                    user_id,
+                ),
+            )
+
+            conn.execute(
+                '''
+                DELETE FROM auth_tokens
+                WHERE user_id = ?
+                ''',
+                (user_id,),
+            )
+
+            conn.commit()
 
     def save_token(
         self,

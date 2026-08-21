@@ -27,6 +27,8 @@ from datetime import UTC, datetime
 
 from .auth import (
     RegisterRequest,
+    RegisterResponse,
+    ResetPasswordRequest,
     TokenResponse,
     UserResponse,
     create_current_user_dependency,
@@ -364,11 +366,11 @@ def health() -> dict[str, str]:
 
 @app.post(
     "/auth/register",
-    response_model=UserResponse,
+    response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["Authentication"],
 )
-def register(request: RegisterRequest) -> UserResponse:
+def register(request: RegisterRequest) -> RegisterResponse:
     try:
         user = auth_service.register(
             username=request.username,
@@ -380,11 +382,30 @@ def register(request: RegisterRequest) -> UserResponse:
             detail=str(error),
         ) from error
 
-    return UserResponse(
+    return RegisterResponse(
         id=user["id"],
         username=user["username"],
         role=user.get("role", "user"),
+        recovery_code=user["recovery_code"],
     )
+
+
+@app.post(
+    "/auth/reset-password",
+    tags=["Authentication"],
+)
+def reset_password(
+    request: ResetPasswordRequest,
+) -> dict[str, str]:
+    auth_service.reset_password(
+        username=request.username,
+        recovery_code=request.recovery_code,
+        new_password=request.new_password,
+    )
+
+    return {
+        "message": "Password reset successful."
+    }
 
 
 @app.post(

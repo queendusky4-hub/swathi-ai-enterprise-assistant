@@ -61,9 +61,18 @@ class PostgresAuthRepository:
                         username TEXT NOT NULL UNIQUE,
                         password_hash TEXT NOT NULL,
                         password_salt TEXT NOT NULL,
+                        recovery_code_hash TEXT,
                         role TEXT NOT NULL DEFAULT 'user',
                         created_at TEXT NOT NULL
                     )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS
+                    recovery_code_hash TEXT
                     """
                 )
 
@@ -96,6 +105,7 @@ class PostgresAuthRepository:
         password_hash: str,
         password_salt: str,
         role: str = "user",
+        recovery_code_hash: str | None = None,
     ) -> dict:
         self._ensure_initialized()
 
@@ -107,16 +117,18 @@ class PostgresAuthRepository:
                         username,
                         password_hash,
                         password_salt,
+                        recovery_code_hash,
                         role,
                         created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         username,
                         password_hash,
                         password_salt,
+                        recovery_code_hash,
                         role,
                         datetime.now(
                             timezone.utc
@@ -154,6 +166,7 @@ class PostgresAuthRepository:
                         username,
                         password_hash,
                         password_salt,
+                        recovery_code_hash,
                         role,
                         created_at
                     FROM users
@@ -165,6 +178,40 @@ class PostgresAuthRepository:
                 row = cursor.fetchone()
 
         return row
+
+    def update_password(
+        self,
+        user_id: int,
+        password_hash: str,
+        password_salt: str,
+    ) -> None:
+        self._ensure_initialized()
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = %s,
+                        password_salt = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        password_hash,
+                        password_salt,
+                        user_id,
+                    ),
+                )
+
+                cursor.execute(
+                    """
+                    DELETE FROM auth_tokens
+                    WHERE user_id = %s
+                    """,
+                    (user_id,),
+                )
+
+            conn.commit()
 
     def save_token(
         self,

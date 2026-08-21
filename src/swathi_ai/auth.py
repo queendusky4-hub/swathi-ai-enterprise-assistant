@@ -32,6 +32,33 @@ class RegisterRequest(BaseModel):
     )
 
 
+class ResetPasswordRequest(BaseModel):
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=50,
+    )
+
+    recovery_code: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+    )
+
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+    )
+
+
+class RegisterResponse(BaseModel):
+    id: int
+    username: str
+    role: str
+    recovery_code: str
+
+
 class UserResponse(BaseModel):
     id: int
     username: str
@@ -99,11 +126,73 @@ class AuthService:
             salt,
         )
 
-        return self.repository.create_user(
+        recovery_code = secrets.token_urlsafe(12)
+
+        recovery_hash = hashlib.sha256(
+            recovery_code.encode("utf-8")
+        ).hexdigest()
+
+        user = self.repository.create_user(
             username=clean_username,
             password_hash=password_hash.hex(),
             password_salt=salt.hex(),
             role="user",
+            recovery_code_hash=recovery_hash,
+        )
+
+        user["recovery_code"] = recovery_code
+
+        return user
+
+    def reset_password(
+        self,
+        username: str,
+        recovery_code: str,
+        new_password: str,
+    ) -> None:
+        clean_username = username.strip().lower()
+
+        user = self.repository.get_user_by_username(
+            clean_username
+        )
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid username or recovery code.",
+            )
+
+        stored_recovery_hash = user.get(
+            "recovery_code_hash"
+        )
+
+        supplied_recovery_hash = hashlib.sha256(
+            recovery_code.strip().encode("utf-8")
+        ).hexdigest()
+
+        if (
+            not stored_recovery_hash
+            or not hmac.compare_digest(
+                stored_recovery_hash,
+                supplied_recovery_hash,
+            )
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid username or recovery code.",
+            )
+
+        new_salt = secrets.token_bytes(32)
+
+        new_password_hash = self.hash_password(
+            new_password,
+            new_salt,
+        )
+
+        self.repository.update_password(
+            user_id=user["id"],
+            password_hash=new_password_hash.hex(),
+            password_salt=new_salt.hex(),
         )
 
     def authenticate(
