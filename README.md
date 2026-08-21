@@ -10,6 +10,26 @@
 [![Tests](https://img.shields.io/badge/Tests-50_Passing-brightgreen.svg)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+## ⚡ Project at a Glance
+
+> **Production-deployed multilingual AI platform combining NLP, RAG, LLM integration, secure REST APIs, automated testing, containerisation, CI/CD, and Azure cloud deployment.**
+
+| | |
+|---|---|
+| 🌍 **Languages** | English • Tamil • Tanglish |
+| 🧠 **AI / NLP** | BERT • Transformers • Google Gemini |
+| 🔎 **Retrieval** | Hybrid RAG • FAISS • BM25 |
+| ⚙️ **Backend** | FastAPI • REST APIs |
+| 🖥️ **Frontend** | Streamlit |
+| 🔐 **Security** | Authentication • Bearer Tokens • Password Recovery • Guest Access |
+| 🗄️ **Data** | PostgreSQL • SQLite |
+| 🧪 **Quality** | Pytest • Ruff • 50 Passing Tests |
+| 📦 **DevOps** | Docker • GitHub Actions • CI/CD |
+| ☁️ **Cloud** | Azure Container Apps • Azure Container Registry |
+| 🚀 **Status** | Production Deployed |
+
+---
+
 ## 🚀 Live Demo
 
 🌐 **Try Swathi AI:**  
