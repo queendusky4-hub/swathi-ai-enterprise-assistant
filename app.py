@@ -11,13 +11,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-import os
 import requests
 from dotenv import load_dotenv
 import base64
 
-import requests
-import speech_recognition as sr
 import streamlit as st
 from streamlit_mic_recorder import mic_recorder
 
