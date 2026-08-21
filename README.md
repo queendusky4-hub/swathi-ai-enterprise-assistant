@@ -68,7 +68,7 @@ flowchart TD
     Q --> R[GitHub Actions CI/CD]
     R --> S[Azure Container Registry]
     S --> T[Azure Container Apps]
-
+```
 
 ## Application Preview
 
