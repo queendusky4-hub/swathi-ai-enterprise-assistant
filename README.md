@@ -8,6 +8,28 @@ The project demonstrates an end-to-end AI engineering workflow from machine-lear
 
 ---
 
+## Application Preview
+
+### Secure Authentication
+
+![Swathi AI Login](docs/screenshots/login.png)
+
+### AI Conversation
+
+![Swathi AI Chat](docs/screenshots/chat.png)
+
+### Tamil, Tanglish and English Support
+
+![Swathi AI Multilingual](docs/screenshots/multilingual.png)
+
+### Document RAG
+
+![Swathi AI RAG](docs/screenshots/rag.png)
+
+---
+
+
+
 ## Key Features
 
 ### Multilingual AI
