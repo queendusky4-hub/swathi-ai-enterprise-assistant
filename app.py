@@ -23,6 +23,15 @@ from swathi_ai.services import get_engine, get_repository
 load_dotenv()
 
 
+st.set_page_config(
+    page_title="Swathi AI Enterprise Assistant | Tamil Tanglish English AI",
+    page_icon="🌺",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
+
 # ---------------------------------------------------------------------
 # CONFIGURATION
 # ---------------------------------------------------------------------
@@ -51,14 +60,6 @@ FFMPEG_PATH = shutil.which("ffmpeg")
 
 if not FFMPEG_PATH and Path(WINDOWS_FFMPEG_FALLBACK).exists():
     FFMPEG_PATH = WINDOWS_FFMPEG_FALLBACK
-
-
-st.set_page_config(
-    page_title=settings.app_name,
-    page_icon="🌺",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 
 # ---------------------------------------------------------------------
@@ -2345,13 +2346,13 @@ if show_history:
 hero_html = (
     '<section class="hero-card">'
     '<div class="hero-logo">&#127802;</div>'
-    f'<h1 class="hero-title">{settings.app_name}</h1>'
+    '<h1 class="hero-title">Swathi AI Enterprise Assistant</h1>'
     '<div class="hero-subtitle">'
-    'Enterprise Multilingual AI Assistant'
+    'Multilingual AI Assistant for Tamil, Tanglish and English'
     '</div>'
     '<div class="hero-features">'
-    'Tamil &bull; Tanglish &bull; English &bull; '
-    'Voice &bull; Memory &bull; Gemini'
+    'BERT Intent Classification &bull; Gemini &bull; Document RAG &bull; '
+    'Voice AI &bull; Memory &bull; FastAPI'
     '</div>'
     '</section>'
 )
