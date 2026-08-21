@@ -29,6 +29,45 @@ The project demonstrates an end-to-end AI engineering workflow from machine-lear
 
 ---
 
+---
+
+## 🏗️ System Architecture
+
+Swathi AI follows a modular production-style architecture separating the user interface, API layer, authentication, AI services, retrieval pipeline, persistence, testing, and cloud deployment.
+
+```mermaid
+flowchart TD
+
+    A[User] --> B[Streamlit Frontend]
+
+    B --> C[FastAPI REST API]
+
+    C --> D[Authentication Layer]
+    C --> E[AI Orchestration Layer]
+    C --> F[Document RAG Service]
+
+    D --> G[(PostgreSQL / SQLite)]
+
+    E --> H[BERT Intent Classifier]
+    E --> I[Google Gemini / LLM]
+
+    F --> J[Document Ingestion]
+    J --> K[Embeddings]
+    K --> L[FAISS Semantic Retrieval]
+    J --> M[BM25 Keyword Retrieval]
+
+    L --> N[Hybrid Retrieval]
+    M --> N
+
+    N --> I
+
+    C --> O[Automated Tests]
+    O --> P[Pytest + Ruff]
+
+    C --> Q[Docker Container]
+    Q --> R[GitHub Actions CI/CD]
+    R --> S[Azure Container Registry]
+    S --> T[Azure Container Apps]
 
 
 ## Application Preview
