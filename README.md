@@ -37,7 +37,7 @@
 ## 🚀 Live Demo
 
 🌐 **Try Swathi AI:**  
-https://swathi-ai-enterprise-assistant-z3ocgep8uabuzmjqhzjmzp.streamlit.app
+https://swathi-ai-enterprise-assistant.streamlit.app/
 
 Swathi AI is a production-deployed multilingual AI assistant supporting **English, Tamil, and Tanglish**, with BERT-based intent classification, LLM integration, document RAG, authentication, REST APIs, and cloud deployment.
 
