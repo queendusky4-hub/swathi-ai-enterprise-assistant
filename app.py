@@ -432,58 +432,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-  
-# FINAL AUTH MOBILE VISIBILITY FIX
-st.markdown(
-    """
-    <style>
-
-    /* Login / Create account / Forgot password */
-    button[data-baseweb="tab"],
-    button[data-baseweb="tab"] p,
-    button[data-baseweb="tab"] span {
-        color: #374151 !important;
-        -webkit-text-fill-color: #374151 !important;
-        opacity: 1 !important;
-    }
-
-    /* Active Login tab */
-    button[data-baseweb="tab"][aria-selected="true"],
-    button[data-baseweb="tab"][aria-selected="true"] p,
-    button[data-baseweb="tab"][aria-selected="true"] span {
-        color: #ef4444 !important;
-        -webkit-text-fill-color: #ef4444 !important;
-    }
-
-    /* Username + Password labels */
-    div[data-testid="stTextInput"] label,
-    div[data-testid="stTextInput"] label p,
-    div[data-testid="stTextInput"] label span,
-    [data-testid="stWidgetLabel"],
-    [data-testid="stWidgetLabel"] p,
-    [data-testid="stWidgetLabel"] span {
-        color: #1f2937 !important;
-        -webkit-text-fill-color: #1f2937 !important;
-        opacity: 1 !important;
-        font-weight: 600 !important;
-    }
-
-    /* Keep text inside dark input boxes light */
-    div[data-testid="stTextInput"] input {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-    }
-
-    div[data-testid="stTextInput"] input::placeholder {
-        color: #b7bac3 !important;
-        -webkit-text-fill-color: #b7bac3 !important;
-        opacity: 1 !important;
-    }
-
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 # ---------------------------------------------------------------------
 # SERVICES
