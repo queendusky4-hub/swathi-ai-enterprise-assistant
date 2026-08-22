@@ -15,10 +15,11 @@ import requests
 from dotenv import load_dotenv
 import base64
 
+
 import streamlit as st
 from streamlit_mic_recorder import mic_recorder
 
-from swathi_ai.config import settings
+
 from swathi_ai.services import get_engine, get_repository
 load_dotenv()
 
