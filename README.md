@@ -3,6 +3,8 @@
 
 [![CI](https://github.com/Swathika-shankar/swathi-ai-enterprise-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Swathika-shankar/swathi-ai-enterprise-assistant/actions/workflows/ci.yml)
 
+[![Deploy Swathi AI to Azure](https://github.com/Swathika-shankar/swathi-ai-enterprise-assistant/actions/workflows/deploy-azure.yml/badge.svg)](https://github.com/Swathika-shankar/swathi-ai-enterprise-assistant/actions/workflows/deploy-azure.yml)
+
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-REST_API-009688.svg)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B.svg)](https://streamlit.io/)
